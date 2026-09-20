@@ -42,7 +42,7 @@ mne = ["mne==1.10.2"]
 dev = ["pytest>=8.0", "mne==1.10.2"]
 
 [tool.setuptools]
-packages = ["eegloop", "eegloop.steps"]
+packages = ["eegloop", "eegloop.steps", "eegloop.sources"]
 
 [tool.setuptools.package-data]
 eegloop = ["py.typed"]

@@ -14,10 +14,12 @@ decisions:
 
 This is version 0.1: the block contract, the ring buffer, causal filters with their state carried
 across blocks, the latency budget and the loopback probe — a port of the real-time section of
-``notebooks/_shared/helpers_l7.py`` into something installable, multichannel and unit-tested. The
-notebook helpers are not edited; ``tests/test_parity_helpers_l7.py`` holds the two to agreement.
-Sources, the quality gate, the feedback loop, the BCI loop and the session runner follow in later
-phases; ``README.md`` says which.
+``notebooks/_shared/helpers_l7.py`` into something installable, multichannel and unit-tested (the
+notebook helpers are not edited; ``tests/test_parity_helpers_l7.py`` holds the two to agreement) —
+plus the sources (a synthetic stream with planted answers, replay of arrays, files and the site's own
+assets, cues on the source clock) and the online steps (the quality gate that runs first on the raw
+block, re-referencing, frozen spatial filters, envelopes, features). The feedback loop, the BCI
+loop, the session runner and the hardware sources follow; ``README.md`` says which.
 """
 from __future__ import annotations
 
@@ -35,9 +37,18 @@ from .latency import (
     zero_phase_lookahead_samples,
 )
 from .probe import energy_centroid, make_probe, measure_loop_delay, run_offline
+from .sources import (
+    SCENARIOS, ListMarkers, MarkerSource, ReplaySource, Source, SyntheticSource, blocks,
+    make_synthetic_stream, open_source, read_recording,
+)
 from .ring import RingBuffer
 from .steps import CANONICAL_ONLINE_ORDER, Chain, OnlineStep
 from .steps.causal_filter import CausalFIR, CausalSOS, Notch, butter_sos, fir_taps
+from .steps.envelope import BandPower, BlockRMS, Smoother
+from .steps.features import FeatureExtractor
+from .steps.quality import QUALITY_LABELS, QualityGate
+from .steps.reference import Reference
+from .steps.spatial import SpatialFilter
 from .stream import DropAccount, Reblocker, detect_gaps
 from .versions import check_pins, config_hash, installed_versions, seed_everything
 
@@ -52,5 +63,9 @@ __all__ = [
     "iir_group_delay_by_phase", "zero_phase_lookahead_samples", "latency_budget",
     "latency_budget_for", "print_budget",
     "make_probe", "energy_centroid", "run_offline", "measure_loop_delay",
+    "Source", "open_source", "blocks", "SyntheticSource", "make_synthetic_stream", "SCENARIOS",
+    "ReplaySource", "read_recording", "MarkerSource", "ListMarkers",
+    "QualityGate", "QUALITY_LABELS", "Reference", "SpatialFilter", "BlockRMS", "Smoother", "BandPower",
+    "FeatureExtractor",
     "installed_versions", "check_pins", "seed_everything", "config_hash",
 ]

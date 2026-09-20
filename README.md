@@ -6,13 +6,16 @@ It is a sibling of `pipelines/eegpipe`, built the same way — `pyproject.toml`,
 deliberately not part of it: `eegpipe` is a batch pipeline over a whole recording and depends on MNE;
 this is a loop over blocks of a stream and depends on numpy and scipy.
 
-**This is version 0.1, the core.** What is here: the block contract, the ring buffer, causal filters
-with their state carried across blocks, the latency budget, and the loopback probe that measures a
-loop's delay instead of trusting the arithmetic. It is a port of the real-time section of
-`notebooks/_shared/helpers_l7.py` into something installable, multichannel and unit-tested. What is
-not here yet, and arrives in later phases: sources (synthetic, replay, hardware), the quality gate,
-re-referencing and spatial filters, the feedback loop, the BCI loop, the session runner and the
-command line. The proposal that lays them out is `site/notes/proposal-phase5-consumer-nf-bci.md`.
+**This is version 0.1.** What is here: the block contract, the ring buffer, causal filters with their
+state carried across blocks, the latency budget, the loopback probe that measures a loop's delay
+instead of trusting the arithmetic — a port of the real-time section of
+`notebooks/_shared/helpers_l7.py` into something installable, multichannel and unit-tested — and, on
+top of it, the sources (a synthetic stream with planted answers; replay of arrays, `.npz`, `.csv`, the
+site's own `.bin` + sidecar assets, and MNE formats through an extra; cues on the source clock) and
+the online steps (a quality gate that runs first on the raw block, re-referencing, frozen spatial
+filters, envelopes, features). What is not here yet, and arrives in later phases: the feedback loop,
+the BCI loop, the session runner, the command line, and the hardware sources. The proposal that lays
+them out is `site/notes/proposal-phase5-consumer-nf-bci.md`.
 
 ## Quick start (nothing is downloaded, no device)
 
@@ -60,6 +63,14 @@ import eegloop
 | `eegloop.steps.causal_filter` | `fir_taps`, `butter_sos`, `CausalFIR`, `CausalSOS`, `Notch` — state carried across blocks; block-wise output equals whole-signal filtering. |
 | `eegloop.latency` | `latency_budget` (by tap count or sections), `latency_budget_for(chain)`, group-delay and look-ahead functions, `BUFFER_CONVENTIONS`, `print_budget`. |
 | `eegloop.probe` | `make_probe`, `energy_centroid`, `run_offline(chain, x)`, `measure_loop_delay(chain_factory)`. |
+| `eegloop.sources` | `Source` — the one interface (`info`, `start`, `read`, `stop`, `clock_now`, `done`); `open_source('synthetic:<scenario>' \| 'replay:<path>')`; `blocks(source, block_samples)`; `ListMarkers` — cues released as the source clock passes them. |
+| `eegloop.sources.synthetic` | `make_synthetic_stream` and `SyntheticSource` with `SCENARIOS` (`clean`, `alpha-schedule`, `blinks`, `gaps`, `flat-channel`, `line-noise`, `pops`, `ssvep`, `mi-2class`, `p300`) and a `truth` dict naming every planted answer: alpha bursts, frontal blinks, a dropped-sample gap that shows in the timestamps, clock drift in ppm, a flicker component, cues with an evoked response and a lateralised power change, single-channel electrode pops, a flat channel. |
+| `eegloop.sources.replay` | `ReplaySource` — arrays, `.npz`, `.csv`, `.bin` + JSON sidecar (`from_asset`), `.fif`/`.edf`/`.bdf` via the `mne` extra; `pace='wall'` releases samples on the clock; `inject_gaps` removes samples so the timestamps jump; reads never straddle a gap. `read_recording` is the reader alone. |
+| `eegloop.steps.quality` | `QualityGate` — runs **first, on the raw block**; `flat`, `pop`, `blink` (frontal channels only, and it says when there are none), `emg`, `line-noise`, `gap`; thresholds ported from `data/scripts/detectors.py` and cited; a three-state verdict with a hold; a *decision* delay, never a signal delay. |
+| `eegloop.steps.reference` | `Reference('none' \| 'average' \| 'channels')` — zero delay, exact; reports its rank cost. |
+| `eegloop.steps.spatial` | `SpatialFilter` — frozen weights applied per block; `from_projector`, `from_ica(unmixing, mixing, exclude)`; zero delay, exact. |
+| `eegloop.steps.envelope` | `BlockRMS` (exact: the block is the delay, already in the buffer row), `Smoother` (no single delay — measured), `BandPower` (Welch over a ring — measured). Each writes `flags['envelope']`. |
+| `eegloop.steps.features` | `FeatureExtractor('log-var' \| 'band-power' \| 'band-ratio')` → `flags['features']`; zero delay, exact. |
 | `eegloop.versions` | `installed_versions`, `check_pins`, `seed_everything`, `config_hash` — copied from `eegpipe`. |
 
 ## The loop, and why it is that shape
@@ -88,6 +99,18 @@ block, because carrying `zi` across 400 ms of nothing is the online form of
 (`B/fs`, the default and the one the site teaches) and `first-to-last` (`(B − 1)/fs`); the reason is
 in `BUFFER_CONVENTIONS`. Quoting one while meaning the other is the commonest error in a latency
 figure, and it is one sample.
+
+## Two words that mean two things in this repository
+
+**Pop.** `data/scripts/detectors.py` defines an electrode pop as an abrupt *sustained* step on one
+channel; `notebooks/_shared/helpers.py` defines it as a sample-to-sample *jump* on one channel; and
+`pipelines/eegpipe/synthetic.py` plants a 20-ms transient under the same name. The gate here fires
+`pop` on either of the first two criteria, cites both, and the synthetic stream plants the first —
+because the gate is a port of `detectors.py`, it plants what that criterion means. The divergence
+from `eegpipe.synthetic` is recorded, not reconciled.
+
+**Delay.** A filter's group delay is a fact about the signal. A gate's window, a smoother's time
+constant and a Welch window are facts about a *decision*. The budget keeps them apart.
 
 ## Tests
 
