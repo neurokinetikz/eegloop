@@ -16,9 +16,11 @@ the online steps (a quality gate that runs first on the raw block, re-referencin
 filters, envelopes, features); and, on top of those, the neurofeedback loop — lesson L7.3's five
 decisions as five objects, the sham modes, a protocol file that names every decision and is validated
 all at once, a session log a notebook opens with numpy alone, a recorder that writes the site's own
-asset format, a command line, and the valid learning test beside the invalid one. What is not here
-yet, and arrives in later phases: the BCI loop and the hardware sources. The proposal that lays them
-out is `site/notes/proposal-phase5-consumer-nf-bci.md`.
+asset format, a command line, and the valid learning test beside the invalid one; and the BCI loop —
+epochs cut on a stated clock, three decoders fitted in cue order and *frozen* into arrays that replay
+them exactly without scikit-learn, a sliding and a cue-locked way to apply one, a steady-state
+detector, and a protocol that calibrates, fits, applies and scores in one run. What is not here yet:
+the hardware sources. The proposal that lays them out is `site/notes/proposal-phase5-consumer-nf-bci.md`.
 
 ## Quick start (nothing is downloaded, no device)
 
@@ -28,6 +30,7 @@ python -m pytest loop
 eegloop run --protocol loop/configs/alpha-up-synthetic.yaml      # a 2-min alpha session, no device
 eegloop budget --protocol loop/configs/alpha-up-synthetic.yaml   # what its chain declares
 eegloop probe  --protocol loop/configs/alpha-up-replay.yaml      # what the loopback probe measures
+eegloop run --protocol loop/configs/mi-2class-synthetic.yaml     # calibrate, fit, freeze, apply, score
 ```
 
 `run` writes `sessions/<name>/` beside the protocol: `session.json` (versions, the protocol's hash,
@@ -35,6 +38,9 @@ the budget with the processing row *measured*, the sealed sham token), `events.j
 rewards, cues, gaps, phases, the baseline as fixed), `signal.npz` (the per-block series) and
 `protocol-resolved.json` (every decision, defaults filled in). Nothing in it names the machine.
 `loop/examples/alpha_bar.py` is the smallest application: the same run with a presenter you wrote.
+A BCI protocol adds `decoder.npz` — the frozen decoder, arrays and a report, loadable with numpy
+alone — and its decisions are scored against the cues of the apply phase with the chance band beside
+the number; `loop/examples/cue_switch.py` is the two-way switch.
 
 The budget lesson L7.3 spends its length on, computed from a chain's own declared delays:
 
@@ -96,6 +102,11 @@ import eegloop
 | `eegloop.present` | `Presenter` — `start`, `update(shown, z, gated, t_s, phase)`, `stop`. `ConsolePresenter` proves the loop is alive; `CallbackPresenter` is the seam where an application begins. |
 | `eegloop.analysis` | `learning_test` — one change score per session, a sign-flip permutation test across sessions (the session is the unit; exact below 13); `naive_trend` — `helpers_l7.within_session_trend`, kept and labelled **invalid**; `crednf_report` — the six items, each *satisfied* / *not satisfiable alone* / *unsatisfied*, with why. |
 | `eegloop.cli` | `eegloop run \| validate \| budget \| probe \| versions`; exit 2 lists every protocol problem. |
+| `eegloop.bci.pipelines` | `csp_lda`, `riemann_ts`, `xdawn_lda` as scikit-learn pipelines from the `decode` extra, mirroring `helpers_l7`'s families by name; `PIPELINE_NOTES` states the one divergence (pyriemann's CSP, so no MNE). |
+| `eegloop.bci.epochs` | `cut_epochs` (offline) and `EpochCutter` (online) — the same window to the sample; `clock='sample'` or `'timestamps'`, because cue alignment is a property of the clock the cues are on; epochs over a gap or a gated stretch are dropped and counted. `Calibrator` harvests labelled epochs as cues arrive. |
+| `eegloop.bci.decoder` | `fit_frozen` — folds in cue order, never shuffled; the chance band (`chance_interval` = `helpers_l6.chance_band`); then `freeze`: the fitted pipeline's covariance estimator, spatial filters, tangent-space reference, scaler and classifier as arrays. `FrozenDecoder.predict_proba` replays it in numpy to 1e-6 (checked at fit time), `save`/`load` an `.npz` with nothing pickled; `latency_samples` = the window. `temporal_split` — disjoint *and* non-adjacent. |
+| `eegloop.bci.stream` | `StreamingPosterior` (a window every step, smoothing measured not summed), `DwellDecision` (threshold, dwell, refractory — a choice, not a cost), `BCILoop` (calibrate → fit → apply in `sliding` or `cue-locked` mode; decisions scored against cues; a gated block stops the posterior and marks the stretch unusable). |
+| `eegloop.bci.ssvep` | `cca_correlation`, `ssvep_cca`, `ssvep_decide`, `SSVEPDetector` — canonical correlation with sine/cosine references, one QR; `SSVEP_NOTE` on the standing-alpha caveat the synthetic scenario makes measurable. |
 
 ## The loop, and why it is that shape
 
@@ -146,6 +157,26 @@ uncontrolled report runs — OLS on autocorrelated per-block values — and it i
 once and permutes signs across sessions, so nothing inside a session can inflate it; it answers only
 whether the targeted signal moved, and `crednf_report` keeps that apart from any outcome claim.
 
+**A decoder is fitted once and frozen.** `fit_frozen` cross-validates in cue order, fits on every
+calibration epoch, then turns the pipeline into arrays — CSP filters and a linear classifier, or a
+tangent-space reference, a scaler and a classifier, or Xdawn filters and a classifier — and checks
+that the arrays reproduce the pipeline's posteriors before returning. The loop runs the arrays. So the
+application needs no scikit-learn, the decoder cannot quietly refit on what it sees, and what was
+applied is exactly what was reported. The window is its delay, stated as such; the dwell before a
+decision is a choice and is listed as one.
+
+**Epochs are cut on the clock the cues are on.** A block carries its sample index and its
+timestamps, and they drift apart — the synthetic stream's by 200 ppm, six samples in two minutes.
+Cues from a replayed or synthetic recording are on the sample clock; cues an application stamps from
+the wall clock are on the timestamps. The cutter is told which and a test shows the misalignment
+when it is told wrong. That is lesson L7.11's point, made a parameter.
+
+**The alpha rhythm looks like an SSVEP at 10 Hz.** The synthetic `ssvep` scenario shows it: the
+canonical correlation with a 10 Hz reference is about 0.5 in every window, flicker or not, because a
+standing posterior alpha *is* a 10 Hz oscillation. Stimulus frequencies belong outside 8–12 Hz, and a
+score means nothing without a no-stimulus baseline. `SSVEP_NOTE` says so wherever the detector is
+described.
+
 ## Two words that mean two things in this repository
 
 **Pop.** `data/scripts/detectors.py` defines an electrode pop as an abrupt *sustained* step on one
@@ -170,16 +201,20 @@ applies the site's private-path and vendor-language patterns to this directory �
 session files a test writes. `tests/test_session.py` runs whole protocols: the feedback rises on the
 planted bursts and nowhere else, the yoked participant sees the donor's values block for block, a
 recording re-opens as an asset, and no file names the machine. `tests/test_protocol.py` asserts the
-same message formats `pipelines/tests/test_config.py` does. Hardware and network tests carry markers
-and never run by default.
+same message formats `pipelines/tests/test_config.py` does. `tests/test_bci.py` holds the frozen
+arithmetic to scikit-learn's and pyriemann's, the online cut to the offline one to the sample, the
+chance band to `helpers_l6`, and the decoders to the planted answers; `tests/test_bci_session.py` runs
+the two BCI protocols end to end. Hardware and network tests carry markers and never run by default.
 
 ## Dependencies
 
 Core: `numpy>=2.1,<3`, `scipy>=1.15,<2` — the ranges `notebooks/requirements.txt` uses. MNE is an
 extra (`mne`) for reading recording formats and `export_fif`, not a dependency of the loop. PyYAML is
-imported lazily by `load_protocol` and named when missing; a JSON protocol needs nothing. Hardware
-drivers are extras the later sources import lazily and fail without by naming the package. `dev`
-carries `mne==1.10.2` so the parity test runs and PyYAML so the shipped protocols load.
+imported lazily by `load_protocol` and named when missing; a JSON protocol needs nothing. Fitting a
+decoder needs the `decode` extra (scikit-learn, pyriemann), imported lazily and named when missing;
+*applying* a frozen decoder needs neither. Hardware drivers are extras the later sources import
+lazily and fail without by naming the package. `dev` carries `mne==1.10.2` so the parity tests run,
+PyYAML so the shipped protocols load, and the `decode` pair so the BCI tests run rather than skip.
 
 ## What this package does not do
 

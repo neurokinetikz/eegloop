@@ -77,8 +77,9 @@ def combine(envelope: np.ndarray, picks: list[int], derivation: str) -> float:
 
 
 def build_chain(spec: SignalSpec, info: StreamInfo, block_samples: int, *,
-                quality: "QualityConfig | None" = None, include_smoother: bool = True) -> Chain:
-    """The canonical online chain for a signal spec: gate (raw) → reference → causal FIR → RMS → smoother."""
+                quality: "QualityConfig | None" = None, include_smoother: bool = True, envelope: bool = True) -> Chain:
+    """The canonical online chain for a signal spec: gate (raw) → reference → causal FIR → RMS → smoother.
+    ``envelope=False`` stops after the filter: the band-limited signal a decoder cuts its windows from."""
     steps: list[Any] = []
     if quality is not None and quality.enabled:
         steps.append(QualityGate(info.fs, info.ch_names, window_s=quality.window_s, hold_s=quality.hold_s,
@@ -86,7 +87,8 @@ def build_chain(spec: SignalSpec, info: StreamInfo, block_samples: int, *,
     if spec.reference != "none":
         steps.append(Reference(spec.reference, info.ch_names, channels=spec.reference_channels))
     steps.append(CausalFIR(fir_taps(spec.n_taps, spec.band, info.fs), info.n_channels, name="fir"))
-    steps.append(BlockRMS())
-    if include_smoother and spec.smooth_s > 0:
-        steps.append(Smoother(spec.smooth_s, info.fs, block_samples))
+    if envelope:
+        steps.append(BlockRMS())
+        if include_smoother and spec.smooth_s > 0:
+            steps.append(Smoother(spec.smooth_s, info.fs, block_samples))
     return Chain(steps, reset_on_gap_samples=spec.n_taps)

@@ -1,0 +1,45 @@
+# A cue-locked oddball decoder on four channels (Pz, Cz, O1, O2) of the synthetic stream.
+#
+# The `p300` scenario flashes a cue every 1.8 s from 5 s, one in four a target with a planted
+# parietal deflection at +350 ms. The calibrate phase harvests every cue before 65 s (about eight
+# targets among thirty-three); the decoder is Xdawn + shrinkage LDA, scored by AUC because the
+# classes are imbalanced; the test phase classifies the window after each remaining cue, once.
+name: p300-synthetic
+seed: 20260920
+block_samples: 32
+processing_ms: 10.0
+buffer_convention: block-period
+
+source:
+  kind: synthetic
+  scenario: p300
+  pace: fast
+
+signal:
+  reference: none
+
+quality:
+  enabled: true
+  window_s: 1.0
+  hold_s: 0.5
+  mains_hz: 60
+  policy: freeze
+
+bci:
+  pipeline: xdawn_lda
+  classes: [standard, target]
+  tmin_s: 0.0
+  tmax_s: 0.8
+  band: [1.0, 20.0]
+  n_taps: 129
+  n_components: 2                   # Xdawn filters per class
+  mode: cue-locked                  # one posterior per cue, once its window has arrived
+  folds: 5
+
+phases:
+  - { kind: calibrate, duration_s: 65 }
+  - { kind: test,      duration_s: 50 }
+
+output:
+  dir: sessions
+  record_raw: false

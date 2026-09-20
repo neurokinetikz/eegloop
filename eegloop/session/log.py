@@ -87,6 +87,11 @@ class SessionLog:
         self._shown: list[float] = []
         self._ok: list[bool] = []
         self._state: list[str] = []
+        self._pt: list[float] = []
+        self._pp: list[np.ndarray] = []
+        self._pok: list[bool] = []
+        self._pphase: list[str] = []
+        self.decoder_file: str | None = None
         self._phase: list[str] = []
         self.recorder = Recorder(self.out_dir, info, name="raw") if record_raw else None
         self.closed = False
@@ -99,6 +104,9 @@ class SessionLog:
         self._t.append(float(t_s)); self._v.append(float(value)); self._z.append(float(z))
         self._shown.append(float(shown)); self._ok.append(bool(gate_ok)); self._phase.append(str(phase))
         self._vs.append(float(value if shown_value is None else shown_value)); self._state.append(str(gate_state))
+
+    def posterior(self, t_s: float, p: np.ndarray, gate_ok: bool, phase: str) -> None:
+        self._pt.append(float(t_s)); self._pp.append(np.asarray(p, dtype=float)); self._pok.append(bool(gate_ok)); self._pphase.append(str(phase))
 
     def raw(self, block: Block) -> None:
         if self.recorder is not None:
@@ -121,8 +129,8 @@ class SessionLog:
             "versions": installed_versions(),
             "source": {"kind": self.info.kind, "fs": self.info.fs, "ch_names": list(self.info.ch_names),
                        "clock": self.info.clock, "nominal": self.info.nominal},
-            "n_values": len(self._t), "n_events": len(self.events),
-            "raw": raw_files,
+            "n_values": len(self._t), "n_posteriors": len(self._pt), "n_events": len(self.events),
+            "raw": raw_files, "decoder": self.decoder_file,
             "files": {"session": "session.json", "events": "events.jsonl", "signal": "signal.npz",
                       "protocol": "protocol-resolved.json"},
         }
@@ -131,10 +139,14 @@ class SessionLog:
         with (self.out_dir / "events.jsonl").open("w", encoding="utf-8") as f:
             for e in self.events:
                 f.write(json.dumps(scrub_value(e), default=str) + "\n")
-        np.savez(self.out_dir / "signal.npz", times_s=np.asarray(self._t), values=np.asarray(self._v),
-                 shown_values=np.asarray(self._vs), z=np.asarray(self._z), shown=np.asarray(self._shown),
-                 gate_ok=np.asarray(self._ok, dtype=bool), gate_state=np.asarray(self._state, dtype=str),
-                 phase=np.asarray(self._phase, dtype=str))
+        arrays = dict(times_s=np.asarray(self._t), values=np.asarray(self._v),
+                      shown_values=np.asarray(self._vs), z=np.asarray(self._z), shown=np.asarray(self._shown),
+                      gate_ok=np.asarray(self._ok, dtype=bool), gate_state=np.asarray(self._state, dtype=str),
+                      phase=np.asarray(self._phase, dtype=str))
+        if self._pt:
+            arrays.update(post_times_s=np.asarray(self._pt), posteriors=np.asarray(self._pp),
+                          post_gate_ok=np.asarray(self._pok, dtype=bool), post_phase=np.asarray(self._pphase, dtype=str))
+        np.savez(self.out_dir / "signal.npz", **arrays)
         (self.out_dir / "protocol-resolved.json").write_text(json.dumps(scrub_value(self.protocol), indent=2, default=str), encoding="utf-8")
         self.closed = True
         return self.out_dir
@@ -170,6 +182,22 @@ class SessionReader:
                 if kind is None or e.get("kind") == kind:
                     out.append(e)
         return out
+
+    @property
+    def posteriors(self) -> tuple[np.ndarray, np.ndarray] | None:
+        """``(times_s, posteriors)`` of a bci session, or ``None`` for a feedback session."""
+        if "posteriors" not in self.signal:
+            return None
+        return self.signal["post_times_s"], self.signal["posteriors"]
+
+    def decoder(self) -> Any:
+        """The frozen decoder a bci session saved, loaded with numpy alone."""
+        name = self.session.get("decoder")
+        if not name:
+            return None
+        from ..bci.decoder import FrozenDecoder
+
+        return FrozenDecoder.load(self.path / name)
 
     @property
     def budget(self) -> dict[str, Any] | None:

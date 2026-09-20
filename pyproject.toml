@@ -28,7 +28,7 @@ dependencies = [
 # Native-Bluetooth boards through one driver. 5.22.0 is the release verified (2026-09-20) to carry the
 # Athena-firmware board id; the sources arrive in a later phase and import this lazily.
 brainflow = ["brainflow>=5.22,<6"]
-# Frozen decoders for the BCI loop (a later phase). Same ranges as notebooks/requirements.txt.
+# Fitting a decoder (eegloop.bci). Same ranges as notebooks/requirements.txt. A frozen decoder replays without either.
 decode = ["scikit-learn>=1.5,<2", "pyriemann>=0.8,<1"]
 # Reading .fif/.edf for replay and exporting a session to FIF. Pinned to notebooks/requirements.txt,
 # version for version, so a recording written here opens in the course's notebooks unchanged.
@@ -39,13 +39,13 @@ mne = ["mne==1.10.2"]
 # `dev` carries mne so tests/test_parity_helpers_l7.py, which imports notebooks/_shared/helpers_l7.py,
 # is a hard import in CI rather than a skip: that test is the one thing guarding the deliberate
 # duplication between this package and the notebook helpers, and a skipped guard is no guard.
-dev = ["pytest>=8.0", "mne==1.10.2", "PyYAML>=6.0,<7"]
+dev = ["pytest>=8.0", "mne==1.10.2", "PyYAML>=6.0,<7", "scikit-learn>=1.5,<2", "pyriemann>=0.8,<1"]
 
 [project.scripts]
 eegloop = "eegloop.cli:main"
 
 [tool.setuptools]
-packages = ["eegloop", "eegloop.steps", "eegloop.sources", "eegloop.feedback", "eegloop.session", "eegloop.present"]
+packages = ["eegloop", "eegloop.steps", "eegloop.sources", "eegloop.feedback", "eegloop.session", "eegloop.present", "eegloop.bci"]
 
 [tool.setuptools.package-data]
 eegloop = ["py.typed"]

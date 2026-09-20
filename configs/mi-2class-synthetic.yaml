@@ -1,0 +1,55 @@
+# Calibrate once, freeze, apply: a two-class imagery decoder on the synthetic stream.
+#
+# The `mi-2class` scenario has C3/Cz/C4/O1 and twenty cues from 10 s every 5 s, each a planted
+# lateralised 8–12 Hz power drop from 0.5 to 3.5 s after the cue. The calibrate phase harvests the
+# twelve cues before 69 s; at 69 s the decoder is fitted (folds in cue order) and frozen; the test
+# phase applies it to the remaining eight cues and scores its decisions against them. Motor imagery
+# is not available on either consumer montage the course names (no C3/C4) — this protocol exists to
+# show the loop's shape on a planted answer, and lesson L7.15 says so. Between cues the decoder keeps
+# deciding: a two-class decoder has no 'rest' class, which is why n_decisions is far above n_trials
+# and why a self-paced application needs a rest state or an idle detector of its own.
+name: mi-2class-synthetic
+seed: 20260920
+block_samples: 32
+processing_ms: 10.0
+buffer_convention: block-period
+
+source:
+  kind: synthetic
+  scenario: mi-2class
+  pace: fast
+
+signal:
+  reference: none                   # the bci block owns the band and the taps; this block lends the reference
+
+quality:
+  enabled: true
+  window_s: 1.0
+  hold_s: 0.5
+  mains_hz: 60
+  policy: freeze
+
+bci:
+  pipeline: csp_lda                 # csp_lda | riemann_ts | xdawn_lda
+  classes: [left, right]
+  tmin_s: 0.5
+  tmax_s: 2.0                       # a 1.5-s window: shorter than the 3-s imagery, so a window fits inside it
+  band: [8.0, 30.0]
+  n_taps: 129
+  n_components: 4
+  mode: sliding                     # a posterior every step, a decision after a dwell
+  step_samples: 32
+  smooth_s: 0.5
+  threshold: 0.7
+  dwell_s: 0.5
+  refractory_s: 1.0
+  folds: 5
+  grace_s: 1.5                      # a decision counts for a cue from tmax to tmax + grace after it
+
+phases:
+  - { kind: calibrate, duration_s: 69 }   # every window of the twelve cues completes before the boundary
+  - { kind: test,      duration_s: 51 }
+
+output:
+  dir: sessions
+  record_raw: false

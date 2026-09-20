@@ -10,7 +10,8 @@ The validation machinery -- ``_coerce``, ``_build``, ``_validate_tree``, ``_one_
 ``_fraction``, ``_type_name``, ``_got``, ``_Invalid`` and ``_apply_overrides`` -- is copied from
 pipelines/eegpipe/config.py @ 2026-09-20 rather than imported, because importing eegpipe would pull
 MNE into a package built to run without it. The copy is byte-for-byte except that ``_validate_tree``
-also descends into lists of blocks (a protocol has a list of phases; a pipeline config has none) and
+also descends into lists of blocks (a protocol has a list of phases; a pipeline config has none),
+``_coerce`` builds an optional block (``BCIConfig | None``) directly so its problems keep their paths, and
 ``ProtocolError`` is the exception's name. ``tests/test_protocol.py`` holds the message format to
 ``pipelines/tests/test_config.py``'s assertions, so the two CLIs read the same to a learner.
 """
@@ -24,6 +25,7 @@ from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from ..bci.pipelines import PIPELINES
 from ..latency import BUFFER_CONVENTIONS
 from ..feedback.sham import SHAM_MODES
 from ..sources.base import SOURCE_KINDS
@@ -31,7 +33,7 @@ from ..sources.synthetic import SCENARIOS
 
 __all__ = [
     "ProtocolError", "Protocol", "SourceConfig", "SignalConfig", "QualityConfig", "BaselineConfig",
-    "RewardConfig", "ShamConfig", "PhaseConfig", "OutputConfig", "VersionsConfig",
+    "RewardConfig", "ShamConfig", "BCIConfig", "PhaseConfig", "OutputConfig", "VersionsConfig",
     "load_protocol", "validate_protocol", "resolved",
 ]
 
@@ -90,6 +92,9 @@ def _coerce(value: Any, hint: Any, path: str, problems: list[str]) -> Any:
         args = typing.get_args(hint)
         if value is None and type(None) in args:
             return None
+        concrete = [a for a in args if a is not type(None)]
+        if len(concrete) == 1 and is_dataclass(concrete[0]):  # an optional block: its problems keep their paths
+            return _build(concrete[0], value, path, problems)
         for arg in args:
             if arg is type(None):
                 continue
@@ -369,6 +374,47 @@ class PhaseConfig:
 
 
 @dataclass
+class BCIConfig:
+    """Calibrate once, freeze, apply. Present in a protocol that runs a decoder instead of feedback."""
+
+    pipeline: str = "csp_lda"                                  # csp_lda | riemann_ts | xdawn_lda
+    classes: list[str] = field(default_factory=lambda: ["left", "right"])
+    tmin_s: float = 0.5                                        # window after the cue, seconds
+    tmax_s: float = 3.5
+    band: list[float] = field(default_factory=lambda: [8.0, 30.0])
+    n_taps: int = 129
+    n_components: int = 4                                      # CSP filters, or Xdawn filters per class
+    mode: str = "sliding"                                      # sliding | cue-locked
+    step_samples: int = 32                                     # sliding: posterior every this many samples
+    smooth_s: float = 0.5                                      # sliding: posterior smoothing (measured, not summed)
+    threshold: float = 0.7                                     # sliding: dwell decision
+    dwell_s: float = 0.5
+    refractory_s: float = 1.0
+    folds: int = 5
+    grace_s: float = 1.0                                       # how long after tmax a decision still counts for a cue
+
+    def _check(self, path: str, problems: list[str]) -> None:
+        _one_of(self.pipeline, PIPELINES, f"{path}.pipeline", problems)
+        _one_of(self.mode, ("sliding", "cue-locked"), f"{path}.mode", problems)
+        if isinstance(self.classes, list) and len(set(self.classes)) < 2:
+            problems.append(f"{path}.classes: expected at least two distinct class labels, got {self.classes}")
+        if isinstance(self.tmin_s, (int, float)) and isinstance(self.tmax_s, (int, float)) and not self.tmin_s < self.tmax_s:
+            problems.append(f"{path}.tmin_s/tmax_s: expected tmin_s < tmax_s, got {self.tmin_s} and {self.tmax_s}")
+        _band(self.band, f"{path}.band", problems)
+        if isinstance(self.n_taps, int) and (self.n_taps < 3 or self.n_taps % 2 == 0):
+            problems.append(f"{path}.n_taps: expected an odd tap count of at least 3 (linear phase), got {self.n_taps}")
+        _positive(self.n_components, f"{path}.n_components", problems)
+        _positive(self.step_samples, f"{path}.step_samples", problems)
+        _positive(self.smooth_s, f"{path}.smooth_s", problems, allow_zero=True)
+        _fraction(self.threshold, f"{path}.threshold", problems)
+        _positive(self.dwell_s, f"{path}.dwell_s", problems, allow_zero=True)
+        _positive(self.refractory_s, f"{path}.refractory_s", problems, allow_zero=True)
+        _positive(self.grace_s, f"{path}.grace_s", problems, allow_zero=True)
+        if isinstance(self.folds, int) and self.folds < 2:
+            problems.append(f"{path}.folds: expected at least 2, got {self.folds}")
+
+
+@dataclass
 class OutputConfig:
     dir: str = "sessions"
     record_raw: bool = False
@@ -396,6 +442,7 @@ class Protocol:
     baseline: BaselineConfig = field(default_factory=BaselineConfig)
     reward: RewardConfig = field(default_factory=RewardConfig)
     sham: ShamConfig = field(default_factory=ShamConfig)
+    bci: BCIConfig | None = None                               # present: calibrate-then-apply instead of feedback
     phases: list[PhaseConfig] = field(default_factory=list)
     output: OutputConfig = field(default_factory=OutputConfig)
     versions: VersionsConfig = field(default_factory=VersionsConfig)
@@ -414,9 +461,14 @@ class Protocol:
             problems.append("phases: required -- a protocol needs at least one phase")
             return
         kinds = [p.kind for p in self.phases]
-        first_feedback = next((i for i, k in enumerate(kinds) if k in ("train", "test")), None)
-        if self.baseline.mode == "fixed" and first_feedback is not None \
-                and not any(k in ("rest", "calibrate") for k in kinds[:first_feedback]):
+        first_apply = next((i for i, k in enumerate(kinds) if k in ("train", "test")), None)
+        if self.bci is not None:
+            if first_apply is not None and "calibrate" not in kinds[:first_apply]:
+                problems.append("phases: a bci protocol needs a calibrate phase (cued trials to fit from) before the "
+                                "first train/test phase")
+            return
+        if self.baseline.mode == "fixed" and first_apply is not None \
+                and not any(k in ("rest", "calibrate") for k in kinds[:first_apply]):
             problems.append("phases: baseline.mode is 'fixed' but no rest or calibrate phase precedes the first "
                             "train/test phase; a fixed baseline needs values to fix from")
 
