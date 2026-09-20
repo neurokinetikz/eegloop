@@ -1,0 +1,55 @@
+# The same protocol over a replayed recording: the site's own shipped asset, a 10-s eyes-closed
+# single-channel trace from ds-eegbci (S001 R02, O1, 160 Hz; ODC-By 1.0). It is the trace the latency
+# widget replays, so the numbers here are the ones lesson L7.3 quotes. Ten seconds is short: the
+# calibration and training phases below fit it, and `loop: true` would replay it again.
+name: alpha-up-replay
+seed: 20260920
+block_samples: 32
+processing_ms: 10.0
+buffer_convention: block-period
+
+source:
+  kind: replay
+  path: ../../site/public/data/widgets/w-latency-budget/alpha-ec.bin   # relative to this file
+  pace: fast
+  loop: false
+
+signal:
+  band: [8.0, 12.0]
+  channels: [O1]
+  reference: none
+  n_taps: 129
+  derivation: rms
+  smooth_s: 0.0
+
+quality:
+  enabled: true
+  window_s: 1.0
+  hold_s: 0.5
+  mains_hz: 60
+  policy: freeze
+
+baseline:
+  mode: fixed
+  centre: median
+  spread: mad
+
+reward:
+  mode: continuous
+  lo_z: -1.0
+  hi_z: 2.0
+
+sham:
+  mode: veridical
+
+phases:
+  - { kind: calibrate, duration_s: 4 }
+  - { kind: train,     duration_s: 6 }
+
+output:
+  dir: sessions
+  record_raw: false
+
+versions:
+  on_mismatch: warn
+  pins: {}

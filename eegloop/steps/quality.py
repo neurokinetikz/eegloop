@@ -16,7 +16,9 @@ that produced the site's shipped artifact annotations -- made causal:
                 ``max(pop_k × robust SD, pop_min_step_uv)`` (6, 100 µV) that its neighbours do not share,
                 or ``helpers.detect_artifacts``'s sample-to-sample jump above ``pop_jump_uv`` (100 µV) on
                 one channel with every other channel below 30 % of it -- the latter fires in the block the
-                jump lands in, the former once the window shows the level has stayed shifted;
+                jump lands in, the former once the window shows the level has stayed shifted. Both need a
+                neighbour: on a one-channel stream locality is untestable and the gate makes no pop claim
+                (a 280-µV eyes-closed alpha wave at 160 Hz clears the jump threshold on its own);
 * ``blink``  -- on frontal channels, a same-sign 0.5-15 Hz deflection above
                 ``max(blink_k × robust SD, blink_min_amp_uv)`` (4, 50 µV);
 * ``emg``    -- 25-100 Hz RMS above ``max(emg_k × running median, emg_min_rms_uv)`` (3, 4 µV);
@@ -134,13 +136,15 @@ class QualityGate:
         return {"name": self.name, "window_s": self.window_s, "hold_s": self.hold_s, "mains_hz": self.mains_hz,
                 "frontal_channels": [self.ch_names[i] for i in self.frontal_idx],
                 "blink_detection": bool(self.frontal_idx) or "no frontal channel in this montage",
+                "pop_detection": self.n_channels > 1 or "one channel: a pop is a local event and locality is not testable without a neighbour",
                 "thresholds": {"flat_sd_uv": self.flat_sd_uv, "pop_k": self.pop_k, "pop_min_step_uv": self.pop_min_step_uv,
                                "pop_jump_uv": self.pop_jump_uv,
                                "blink_k": self.blink_k, "blink_min_amp_uv": self.blink_min_amp_uv,
                                "emg_k": self.emg_k, "emg_min_rms_uv": self.emg_min_rms_uv,
                                "line_min_ratio": self.line_min_ratio},
                 "criteria_from": ["data/scripts/detectors.py", "notebooks/_shared/helpers.py:detect_artifacts (pop jump)"],
-                "min_good_channels": self.min_good_channels}
+                "min_good_channels": self.min_good_channels,
+                "verdict": "ok unless a channel is unusable, fewer than min_good_channels are good-or-suspect, the hold is running, or the window is not yet full; suspect channels are fed back and labelled"}
 
     def reset(self) -> None:
         self._raw = RingBuffer(self.n_channels, self.window, fs=self.fs)
@@ -183,7 +187,8 @@ class QualityGate:
             metrics[i]["max_jump_uv"] = float(jumps[i, j])
             if jumps[i, j] > self.pop_jump_uv:
                 others = np.delete(jumps[:, j], i)
-                if others.size == 0 or others.max() < self.pop_jump_neighbour_frac * jumps[i, j]:
+                # a pop is a local event; with no other channel its locality is untestable, so no claim
+                if others.size and others.max() < self.pop_jump_neighbour_frac * jumps[i, j]:
                     labels[i].add("pop")
         self._last_sample = block.data[:, -1].copy()
         if not ready:
@@ -194,23 +199,27 @@ class QualityGate:
         self.n_decisions += 1
 
         per_channel: dict[str, dict[str, Any]] = {}
-        n_good = n_unusable = 0
+        n_good = n_suspect = n_unusable = 0
         for i, ch in enumerate(self.ch_names):
             ls = labels[i]
             status = "unusable" if ls & self.unusable_labels else ("suspect" if ls & self.suspect_labels else "good")
             n_good += status == "good"
+            n_suspect += status == "suspect"
             n_unusable += status == "unusable"
             per_channel[ch] = {"status": status, "labels": sorted(ls), "metrics": metrics[i]}
-        violated = n_unusable > 0 or n_good < self.min_good_channels
+        # a suspect channel is still fed back -- a visible mains line is the normal state of an
+        # un-notched recording, and the band-pass removes it -- so the verdict is 'suspect', not closed;
+        # the gate closes on an unusable channel, or on too few usable (good or suspect) ones
+        violated = n_unusable > 0 or (n_good + n_suspect) < self.min_good_channels
         if violated:
             self._held_until_s = self._t_s + self.hold_s
         held = self._t_s < self._held_until_s
         ok = not violated and not held and ready
         all_labels = sorted(set().union(*labels.values()))
-        state = "unusable" if (n_unusable > 0 or held) else ("suspect" if not ok else "good")
+        state = "unusable" if (n_unusable > 0 or held) else ("suspect" if (not ok or n_suspect) else "good")
         return block.with_flag("quality", {
             "ok": bool(ok), "state": state, "labels": all_labels, "per_channel": per_channel,
-            "n_good": n_good, "ready": ready, "held": bool(held and not violated),
+            "n_good": n_good, "n_suspect": n_suspect, "ready": ready, "held": bool(held and not violated),
             "held_until_s": self._held_until_s if held else None, "window_s": self.window_s,
         })
 
@@ -233,7 +242,7 @@ class QualityGate:
             metrics[i]["step_uv"] = float(step[i])
             if abs(step[i]) > thr:
                 others = np.delete(np.abs(step), i)
-                if others.size == 0 or others.max() < self.pop_neighbour_frac * abs(step[i]):
+                if others.size and others.max() < self.pop_neighbour_frac * abs(step[i]):
                     labels[i].add("pop")
         # line noise: Welch ratio at mains against the neighbourhood 2-8 Hz away
         if self.mains_hz is not None and self.mains_hz < 0.95 * self.fs / 2:

@@ -1,0 +1,57 @@
+# An alpha up-training session on the synthetic stream: nothing downloaded, no device.
+#
+# The `alpha-schedule` scenario plants two 10 Hz bursts (30–38 s and 75–81 s) on posterior-weighted
+# channels. With a 20-s calibration and a 100-s training phase, both bursts fall inside training, so
+# a run should show the feedback rising there and nowhere else. `eegloop run --protocol <this file>`
+# writes sessions/alpha-up-synthetic/.
+name: alpha-up-synthetic
+seed: 20260920
+block_samples: 32
+processing_ms: 10.0                 # stated; the run measures the real one and prints both
+buffer_convention: block-period
+
+source:
+  kind: synthetic
+  scenario: alpha-schedule
+  pace: fast                        # 'wall' to feel the loop at its real update rate
+
+signal:                             # L7.3 decision 1: what the signal is, exactly
+  band: [8.0, 12.0]
+  channels: [TP9, TP10]             # the temporal-posterior pair of a frontotemporal-4 headband
+  reference: none
+  n_taps: 129
+  derivation: rms
+  control_band: [16.0, 20.0]        # what `sham-band` would compute instead
+  smooth_s: 0.0                     # smoothing is latency; leave it visible
+
+quality:                            # gate rather than clean (L7.3)
+  enabled: true
+  window_s: 1.0
+  hold_s: 0.5
+  mains_hz: 60
+  policy: freeze                    # the display freezes on a bad stretch; it never shows a cleaned guess
+
+baseline:                           # decision 3: fixed from the calibration phase, so it does not move
+  mode: fixed
+  centre: median
+  spread: mad
+
+reward:                             # decisions 2 and 4: a continuous bar from z = -1 to z = +2
+  mode: continuous
+  lo_z: -1.0
+  hi_z: 2.0
+
+sham:
+  mode: veridical                   # sham-band | sham-yoked (needs `donor`) | sham-inverted
+
+phases:
+  - { kind: calibrate, duration_s: 20 }
+  - { kind: train,     duration_s: 100 }
+
+output:
+  dir: sessions
+  record_raw: false
+
+versions:
+  on_mismatch: warn
+  pins: {}

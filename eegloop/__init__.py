@@ -49,6 +49,16 @@ from .steps.features import FeatureExtractor
 from .steps.quality import QUALITY_LABELS, QualityGate
 from .steps.reference import Reference
 from .steps.spatial import SpatialFilter
+from .feedback import (
+    CREDNF_ITEMS, SHAM_MODES, AdaptiveBaseline, ContinuousMapping, FeedbackLoop, FixedBaseline, LoopStats,
+    RewardEvent, ShamPolicy, SignalSpec, ThresholdReward, build_chain, combine,
+)
+from .present import CallbackPresenter, ConsolePresenter, NullPresenter, Presenter
+from .session import (
+    Protocol, ProtocolError, Recorder, SessionLog, SessionReader, SessionResult, build_source, export_fif,
+    load_protocol, resolved, run_protocol, scrub_paths, validate_protocol,
+)
+from .analysis import crednf_report, learning_test, naive_trend, session_change
 from .stream import DropAccount, Reblocker, detect_gaps
 from .versions import check_pins, config_hash, installed_versions, seed_everything
 
@@ -67,5 +77,11 @@ __all__ = [
     "ReplaySource", "read_recording", "MarkerSource", "ListMarkers",
     "QualityGate", "QUALITY_LABELS", "Reference", "SpatialFilter", "BlockRMS", "Smoother", "BandPower",
     "FeatureExtractor",
+    "SignalSpec", "build_chain", "combine", "FixedBaseline", "AdaptiveBaseline", "ContinuousMapping",
+    "ThresholdReward", "RewardEvent", "SHAM_MODES", "CREDNF_ITEMS", "ShamPolicy", "FeedbackLoop", "LoopStats",
+    "Presenter", "NullPresenter", "ConsolePresenter", "CallbackPresenter",
+    "Protocol", "ProtocolError", "load_protocol", "validate_protocol", "resolved", "SessionLog", "SessionReader",
+    "Recorder", "export_fif", "SessionResult", "run_protocol", "build_source", "scrub_paths",
+    "naive_trend", "session_change", "learning_test", "crednf_report",
     "installed_versions", "check_pins", "seed_everything", "config_hash",
 ]

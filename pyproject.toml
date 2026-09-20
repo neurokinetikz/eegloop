@@ -39,10 +39,13 @@ mne = ["mne==1.10.2"]
 # `dev` carries mne so tests/test_parity_helpers_l7.py, which imports notebooks/_shared/helpers_l7.py,
 # is a hard import in CI rather than a skip: that test is the one thing guarding the deliberate
 # duplication between this package and the notebook helpers, and a skipped guard is no guard.
-dev = ["pytest>=8.0", "mne==1.10.2"]
+dev = ["pytest>=8.0", "mne==1.10.2", "PyYAML>=6.0,<7"]
+
+[project.scripts]
+eegloop = "eegloop.cli:main"
 
 [tool.setuptools]
-packages = ["eegloop", "eegloop.steps", "eegloop.sources"]
+packages = ["eegloop", "eegloop.steps", "eegloop.sources", "eegloop.feedback", "eegloop.session", "eegloop.present"]
 
 [tool.setuptools.package-data]
 eegloop = ["py.typed"]

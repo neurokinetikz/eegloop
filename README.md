@@ -13,16 +13,28 @@ instead of trusting the arithmetic — a port of the real-time section of
 top of it, the sources (a synthetic stream with planted answers; replay of arrays, `.npz`, `.csv`, the
 site's own `.bin` + sidecar assets, and MNE formats through an extra; cues on the source clock) and
 the online steps (a quality gate that runs first on the raw block, re-referencing, frozen spatial
-filters, envelopes, features). What is not here yet, and arrives in later phases: the feedback loop,
-the BCI loop, the session runner, the command line, and the hardware sources. The proposal that lays
-them out is `site/notes/proposal-phase5-consumer-nf-bci.md`.
+filters, envelopes, features); and, on top of those, the neurofeedback loop — lesson L7.3's five
+decisions as five objects, the sham modes, a protocol file that names every decision and is validated
+all at once, a session log a notebook opens with numpy alone, a recorder that writes the site's own
+asset format, a command line, and the valid learning test beside the invalid one. What is not here
+yet, and arrives in later phases: the BCI loop and the hardware sources. The proposal that lays them
+out is `site/notes/proposal-phase5-consumer-nf-bci.md`.
 
 ## Quick start (nothing is downloaded, no device)
 
 ```sh
 pip install -e './loop[dev]'
 python -m pytest loop
+eegloop run --protocol loop/configs/alpha-up-synthetic.yaml      # a 2-min alpha session, no device
+eegloop budget --protocol loop/configs/alpha-up-synthetic.yaml   # what its chain declares
+eegloop probe  --protocol loop/configs/alpha-up-replay.yaml      # what the loopback probe measures
 ```
+
+`run` writes `sessions/<name>/` beside the protocol: `session.json` (versions, the protocol's hash,
+the budget with the processing row *measured*, the sealed sham token), `events.jsonl` (gate closures,
+rewards, cues, gaps, phases, the baseline as fixed), `signal.npz` (the per-block series) and
+`protocol-resolved.json` (every decision, defaults filled in). Nothing in it names the machine.
+`loop/examples/alpha_bar.py` is the smallest application: the same run with a presenter you wrote.
 
 The budget lesson L7.3 spends its length on, computed from a chain's own declared delays:
 
@@ -72,6 +84,18 @@ import eegloop
 | `eegloop.steps.envelope` | `BlockRMS` (exact: the block is the delay, already in the buffer row), `Smoother` (no single delay — measured), `BandPower` (Welch over a ring — measured). Each writes `flags['envelope']`. |
 | `eegloop.steps.features` | `FeatureExtractor('log-var' \| 'band-power' \| 'band-ratio')` → `flags['features']`; zero delay, exact. |
 | `eegloop.versions` | `installed_versions`, `check_pins`, `seed_everything`, `config_hash` — copied from `eegpipe`. |
+| `eegloop.feedback.signal` | `SignalSpec` — decision 1, *what the signal is*, exactly: band, channels, reference, taps, derivation, smoothing; `describe()` is the sentence CRED-nf item 4 asks for. `build_chain` — gate (raw) → reference → causal FIR → RMS → smoother. |
+| `eegloop.feedback.baseline` | `FixedBaseline.from_values` (the threshold does not move) and `AdaptiveBaseline` (it follows the participant). Each carries a `note` saying what it does to a learning claim. |
+| `eegloop.feedback.reward` | `ContinuousMapping` (z → [0, 1]) and `ThresholdReward` (dwell, refractory, what a miss shows). Time comes from the block clock, never `time.time()`. |
+| `eegloop.feedback.sham` | `SHAM_MODES` and `CREDNF_ITEMS` verbatim from `helpers_l7`; `ShamPolicy` — veridical, yoked (replays a donor session on the same schedule), band, inverted — sealed into the log as a token the seed unblinds. |
+| `eegloop.feedback.loop` | `FeedbackLoop` — one block: gate → value → sham → baseline → z → mapping → what is shown; gated blocks freeze or zero the display, never a cleaned guess; the processing row is measured with `perf_counter`. `budget()` fills that row in. |
+| `eegloop.session.protocol` | `Protocol` and its blocks (`source`, `signal`, `quality`, `baseline`, `reward`, `sham`, `phases`, `output`, `versions`); `load_protocol` (YAML or JSON, dotted overrides); `ProtocolError` lists every problem at once in `eegpipe`'s message format, with did-you-mean. |
+| `eegloop.session.log` | `SessionLog` and `SessionReader` — the files above, every string scrubbed of absolute paths (`scrub_paths`, from `eegpipe.run`); the reader needs numpy alone; `.feedback` is the donor a yoked sham replays. |
+| `eegloop.session.record` | `Recorder` — the stream as it arrived, in spec §4.5's `.bin` + sidecar, so a learner's recording opens exactly as a shipped asset does (`ReplaySource.from_asset`); `export_fif` behind the `mne` extra. The sidecar says `license: private`. |
+| `eegloop.session.runner` | `run_protocol(protocol, source=None, presenter=None)` → `SessionResult`; `build_source` (hardware kinds say "later phase"). |
+| `eegloop.present` | `Presenter` — `start`, `update(shown, z, gated, t_s, phase)`, `stop`. `ConsolePresenter` proves the loop is alive; `CallbackPresenter` is the seam where an application begins. |
+| `eegloop.analysis` | `learning_test` — one change score per session, a sign-flip permutation test across sessions (the session is the unit; exact below 13); `naive_trend` — `helpers_l7.within_session_trend`, kept and labelled **invalid**; `crednf_report` — the six items, each *satisfied* / *not satisfiable alone* / *unsatisfied*, with why. |
+| `eegloop.cli` | `eegloop run \| validate \| budget \| probe \| versions`; exit 2 lists every protocol problem. |
 
 ## The loop, and why it is that shape
 
@@ -100,6 +124,28 @@ block, because carrying `zi` across 400 ms of nothing is the online form of
 in `BUFFER_CONVENTIONS`. Quoting one while meaning the other is the commonest error in a latency
 figure, and it is one sample.
 
+**Suspect is fed back and said so; unusable is closed.** The gate's verdict has three states. A
+visible mains line is the normal state of an un-notched recording and the band-pass removes it, so
+`line-noise` marks a channel *suspect* and the block is still fed back with that label in the log. A
+flat channel, a pop, a blink, a muscle burst or a gap marks it *unusable*, and the display is frozen
+or zeroed for the block and a hold afterwards — never fed a cleaned estimate. A pop is a *local*
+event: on a one-channel stream its locality cannot be tested and the gate makes no pop claim (the
+shipped eyes-closed trace has 280-µV alpha waves that clear the jump threshold on their own).
+
+**The control condition is in the library, not the notebook.** A loop without a sham mode cannot
+support the claim its participant is being asked to believe. `ShamPolicy` runs the four modes
+`helpers_l7` names, seals the mode into the log as a token only the seed unblinds, and the yoked mode
+replays another session's per-block values on the same schedule — which is why the session log has a
+reader. One divergence is recorded: `helpers_l7.sham_feedback` inverts about the whole-session mean,
+which needs the future; the live loop inverts about the calibration baseline, the centre that exists
+when the value is shown.
+
+**The test that is valid is beside the one that is not.** `naive_trend` is the analysis an
+uncontrolled report runs — OLS on autocorrelated per-block values — and it is kept, labelled
+`valid: False`, because the course shows what it does wrong. `learning_test` scores each session
+once and permutes signs across sessions, so nothing inside a session can inflate it; it answers only
+whether the targeted signal moved, and `crednf_report` keeps that apart from any outcome claim.
+
 ## Two words that mean two things in this repository
 
 **Pop.** `data/scripts/detectors.py` defines an electrode pop as an abrupt *sustained* step on one
@@ -120,15 +166,20 @@ reference the site's latency widget is itself tested against
 asserts the L7.3 pipeline at 610.00 ms causal and 1010.00 ms zero-phase-live.
 `tests/test_parity_helpers_l7.py` holds this package to `notebooks/_shared/helpers_l7.py` to 1e-12;
 under CI that import is hard, so the guard cannot skip itself away. `tests/test_neutrality.py`
-applies the site's private-path and vendor-language patterns to this directory. Hardware and network
-tests carry markers and never run by default.
+applies the site's private-path and vendor-language patterns to this directory — including to the
+session files a test writes. `tests/test_session.py` runs whole protocols: the feedback rises on the
+planted bursts and nowhere else, the yoked participant sees the donor's values block for block, a
+recording re-opens as an asset, and no file names the machine. `tests/test_protocol.py` asserts the
+same message formats `pipelines/tests/test_config.py` does. Hardware and network tests carry markers
+and never run by default.
 
 ## Dependencies
 
 Core: `numpy>=2.1,<3`, `scipy>=1.15,<2` — the ranges `notebooks/requirements.txt` uses. MNE is an
-extra (`mne`) for reading recording formats, not a dependency of the loop. Hardware drivers are extras
-the later sources import lazily and fail without by naming the package. `dev` carries `mne==1.10.2`
-only so the parity test runs.
+extra (`mne`) for reading recording formats and `export_fif`, not a dependency of the loop. PyYAML is
+imported lazily by `load_protocol` and named when missing; a JSON protocol needs nothing. Hardware
+drivers are extras the later sources import lazily and fail without by naming the package. `dev`
+carries `mne==1.10.2` so the parity test runs and PyYAML so the shipped protocols load.
 
 ## What this package does not do
 
