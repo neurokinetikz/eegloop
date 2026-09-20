@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eegloop"
+version = "0.1.0"
+description = "Streaming EEG loops for the Scalp to Source course: one Source, one Block, causal steps that declare their delay, and a latency budget you can measure."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["eeg", "real-time", "neurofeedback", "bci", "streaming"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+# The core is numpy and scipy, nothing else: a learner's application loop has to install on a laptop
+# that has never seen MNE. The ranges mirror notebooks/requirements.txt. Everything that talks to a
+# device, reads a recording format or runs a classifier is an extra, so `import eegloop` never
+# imports a package the loop itself does not need.
+dependencies = [
+  "numpy>=2.1,<3",
+  "scipy>=1.15,<2",
+]
+
+[project.optional-dependencies]
+# Native-Bluetooth boards through one driver. 5.22.0 is the release verified (2026-09-20) to carry the
+# Athena-firmware board id; the sources arrive in a later phase and import this lazily.
+brainflow = ["brainflow>=5.22,<6"]
+# Frozen decoders for the BCI loop (a later phase). Same ranges as notebooks/requirements.txt.
+decode = ["scikit-learn>=1.5,<2", "pyriemann>=0.8,<1"]
+# Reading .fif/.edf for replay and exporting a session to FIF. Pinned to notebooks/requirements.txt,
+# version for version, so a recording written here opens in the course's notebooks unchanged.
+mne = ["mne==1.10.2"]
+# TODO(confirm): an `lsl` extra — mne-lsl (named by lesson L7.3's objective; depends on MNE) or pylsl
+# (lighter; needs liblsl installed separately) — is decided at a named release when the LSL source
+# is written. Neither is declared until then.
+# `dev` carries mne so tests/test_parity_helpers_l7.py, which imports notebooks/_shared/helpers_l7.py,
+# is a hard import in CI rather than a skip: that test is the one thing guarding the deliberate
+# duplication between this package and the notebook helpers, and a skipped guard is no guard.
+dev = ["pytest>=8.0", "mne==1.10.2"]
+
+[tool.setuptools]
+packages = ["eegloop", "eegloop.steps"]
+
+[tool.setuptools.package-data]
+eegloop = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Hardware and network tests never run by default; a runner has neither a paired headset nor a
+# dataset, and a test that needs one says so with its marker.
+addopts = "-q -m 'not hardware and not network'"
+markers = [
+  "hardware: needs a paired headset; run with EEGLOOP_HARDWARE=<board-key>",
+  "network: downloads a public dataset",
+  "parity: cross-checks eegloop against notebooks/_shared/helpers_l7.py; CI asserts it ran",
+]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]

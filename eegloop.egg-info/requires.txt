@@ -1,0 +1,16 @@
+numpy<3,>=2.1
+scipy<2,>=1.15
+
+[brainflow]
+brainflow<6,>=5.22
+
+[decode]
+scikit-learn<2,>=1.5
+pyriemann<1,>=0.8
+
+[dev]
+pytest>=8.0
+mne==1.10.2
+
+[mne]
+mne==1.10.2
