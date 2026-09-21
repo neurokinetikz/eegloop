@@ -23,7 +23,7 @@ PIPELINE_NOTES: dict[str, str] = {
     "csp_lda": "Covariance (OAS) → CSP spatial filters → log-variance → LDA: the classical motor-imagery baseline. "
                "CSP is pyriemann.spatialfilters.CSP on covariance matrices, not mne.decoding.CSP as in "
                "helpers_l7.make_csp_lda — the same generalised eigenproblem, a different implementation, so the "
-               "decode extra needs no MNE; nb-7-15 reports the two side by side.",
+               "decode extra needs no MNE; the two solve the same eigenproblem and nb-7-15 uses this one.",
     "riemann_ts": "Covariance (OAS) → tangent space at the Riemannian mean → standardise → logistic regression: "
                   "helpers_l7.make_riemann_ts, unchanged. No spatial filter is fitted.",
     "xdawn_lda": "Xdawn spatial filters → the filtered epoch, flattened → shrinkage LDA: "

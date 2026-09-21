@@ -244,8 +244,8 @@ def _band(value: Any, path: str, problems: list[str]) -> None:
 # --------------------------------------------------------------------------- #
 @dataclass
 class SourceConfig:
-    """Where the blocks come from. ``synthetic`` and ``replay`` run anywhere; the hardware kinds
-    need a headset and arrive in a later phase."""
+    """Where the blocks come from. ``synthetic`` and ``replay`` run anywhere; ``brainflow`` needs a
+    headset and the driver extra; ``lsl`` waits on the binding decision."""
 
     kind: str = "synthetic"
     scenario: str = "alpha-schedule"       # synthetic only

@@ -90,6 +90,30 @@ def test_alpha_bar_on_the_shipped_four_channel_asset_writes_a_complete_session(t
     # rubric: the sealed mode is in the log and only the seed unblinds it
     token = session["sealed_sham"]
     assert token and ShamPolicy.unblind(token, load_protocol(OC4).seed) == "veridical"
+    # rubric: crednf_report lists six items from the log; the learning outcome is learning_test (valid) and
+    # the naive trend is labelled invalid, so it cannot be reported as the outcome by mistake
+    from eegloop.analysis import crednf_report, learning_test, naive_trend
+
+    reader = SessionReader(out)
+    report = crednf_report(reader.protocol, reader.session)
+    assert len(report) == 6 and {i["status"] for i in report} <= {"satisfied", "not-satisfiable-alone", "unsatisfied"}
+    t_s, values = reader.feedback
+    assert naive_trend(values, t_s)["valid"] is False
+    assert learning_test([values, values[::-1]])["valid"] is True
+
+
+def test_the_probe_on_the_asset_protocol_is_within_one_block_of_the_arithmetic():
+    """Rubric item 2's last clause: the loopback probe's value delay against the chain's exact rows."""
+    from eegloop import StreamInfo, measure_loop_delay
+    from eegloop.feedback import SignalSpec, build_chain
+
+    p = load_protocol(OC4)
+    fs = 160.0
+    spec = SignalSpec.from_config(p.signal).replace(channels=(), reference="none", reference_channels=())
+    one = StreamInfo(fs, ("O1",), kind="replay")
+    r = measure_loop_delay(lambda: build_chain(spec, one, p.block_samples, quality=None, include_smoother=False),
+                           fs=fs, block_samples=p.block_samples, centre_hz=float(sum(spec.band) / 2), alignments=8, smooth_s=spec.smooth_s)
+    assert abs(r["value_ms"] - r["expected_value_ms"]) <= p.block_samples / fs * 1000.0
 
 
 @pytest.mark.skipif(not _oc4_asset_present(), reason="shipped four-channel asset not present")

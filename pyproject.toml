@@ -26,7 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Native-Bluetooth boards through one driver. 5.22.0 is the release verified (2026-09-20) to carry the
-# Athena-firmware board id; the sources arrive in a later phase and import this lazily.
+# Athena-firmware board id; eegloop.sources.brainflow imports it lazily and names it when missing.
 brainflow = ["brainflow>=5.22,<6"]
 # Fitting a decoder (eegloop.bci). Same ranges as notebooks/requirements.txt. A frozen decoder replays without either.
 decode = ["scikit-learn>=1.5,<2", "pyriemann>=0.8,<1"]
