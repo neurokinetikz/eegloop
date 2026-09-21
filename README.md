@@ -39,8 +39,17 @@ eegloop check --source synthetic:clean --seconds 10 --mains 60   # the acceptanc
 ```
 
 Run from **this directory**. Inside the course monorepo that is `loop/`, so prefix the paths
-(`pip install -e './loop[dev]'`, `python -m pytest loop`, `--protocol loop/configs/…`); in a clone of the
-standalone package repository it is the root and the lines above run as written.
+(`pip install -e './loop[dev]'`, `python -m pytest loop`, `--protocol loop/configs/…`); in a clone of
+[neurokinetikz/eegloop](https://github.com/neurokinetikz/eegloop) it is the root and the lines above run as
+written.
+
+**Where this lives.** The package is developed inside the course repository (the lessons that teach it are
+L7.10–L7.16 of [Scalp to Source](https://eeg.neurokinetikz.com/paths/consumer-nf-bci), and
+`tests/test_parity_helpers_l7.py` holds it to the notebooks it was ported from) and mirrored one way to
+`neurokinetikz/eegloop` by `git subtree`, so that a clone is a working package with no course attached. Issues
+and pull requests on the mirror are read; changes are made upstream and arrive with the next push, so a commit
+made on the mirror would be overwritten. Seven of 143 tests skip in a standalone clone — the ones that
+cross-check against the course's notebook helpers — and say so when they do.
 
 `run` writes `sessions/<name>/` beside the protocol: `session.json` (versions, the protocol's hash,
 the budget with the processing row *measured*, the sealed sham token), `events.jsonl` (gate closures,
