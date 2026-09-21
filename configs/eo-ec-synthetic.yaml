@@ -1,0 +1,55 @@
+# Eyes closed against eyes open, calibrated then applied, on the default four-channel stream.
+#
+# The `eo-ec` scenario alternates 6-s eyes-closed and eyes-open periods from 4 s, each announced by
+# a cue; every closed period carries a planted 18-µV alpha burst on the posterior-weighted channels.
+# Unlike `mi-2class-synthetic.yaml` this is a state both montage classes the course names CAN decode
+# (lesson L7.15: posterior alpha reaches the temporal sites at a fraction of its occipital weight).
+# The calibrate phase harvests twelve cues (six per class) before 76 s; the decoder is fitted with
+# folds in cue order and frozen; the test phase applies it to the remaining seven cues and scores
+# each by its first decision inside the period. Between cues the decoder keeps deciding — a
+# two-class decoder has no idle state — which is why an application built on it needs a dwell.
+name: eo-ec-synthetic
+seed: 20260920
+block_samples: 32
+processing_ms: 10.0
+buffer_convention: block-period
+
+source:
+  kind: synthetic
+  scenario: eo-ec
+  pace: fast
+
+signal:
+  reference: none                   # the bci block owns the band and the taps; this block lends the reference
+
+quality:
+  enabled: true
+  window_s: 1.0
+  hold_s: 0.5
+  mains_hz: 60
+  policy: freeze
+
+bci:
+  pipeline: csp_lda                 # csp_lda | riemann_ts | xdawn_lda
+  classes: [closed, open]
+  tmin_s: 0.5
+  tmax_s: 3.5                       # a 3-s window inside a 6-s period
+  band: [4.0, 30.0]
+  n_taps: 129
+  n_components: 4
+  mode: sliding                     # a posterior every step, a decision after a dwell
+  step_samples: 32
+  smooth_s: 0.5
+  threshold: 0.7
+  dwell_s: 0.5
+  refractory_s: 1.0
+  folds: 5
+  grace_s: 2.5                      # a decision counts for a cue from tmax to tmax + grace: the rest of its period
+
+phases:
+  - { kind: calibrate, duration_s: 76 }   # twelve cues (4 … 70 s), every window complete before the boundary
+  - { kind: test,      duration_s: 44 }   # seven cues (76 … 112 s)
+
+output:
+  dir: sessions
+  record_raw: false

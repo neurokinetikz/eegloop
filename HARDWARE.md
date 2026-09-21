@@ -62,6 +62,30 @@ A filed report goes to `site/notes/device-<key>.md`. Nothing from it is quoted o
 quote `ds-eegbci` channel subsets for every number, because a difference between devices is a
 montage or bandwidth fact plus its analytic consequence, never a recording of a named product.
 
+## Documenting a run on a headset
+
+A session on a headset is documented, not shipped: no number from it appears on a page, and a single
+self-run supports no efficacy claim whatever it shows. The record below is what lesson L7.16 asks for.
+Every value is measured from the session directory or the `eegloop check` report, never typed from a
+product page; a value nobody measured stays `TODO(confirm)`. No serial number, pairing address or
+machine path belongs in it.
+
+```
+device class            TODO(confirm)   frontotemporal-4 | occipitotemporal-4 | …
+board key               TODO(confirm)   a key of `eegloop devices`
+driver / firmware       TODO(confirm)   session.json → versions
+rate, nominal           TODO(confirm)   Hz, from the board table
+rate, effective         TODO(confirm)   Hz, `eegloop check` → rate over the timestamps' span
+drops                   TODO(confirm)   samples lost over the session (events.jsonl kind=gap; the package counter)
+gate fraction           TODO(confirm)   n_gated / n_blocks from session.json → stats
+processing, measured    TODO(confirm)   p50 / p95 ms from session.json → budget (the row marked measured)
+loopback probe          TODO(confirm)   ms, software probe on this chain (required); electrical loopback optional
+sealed mode             TODO(confirm)   the token from session.json, unblinded with the protocol's seed after the session
+blinding check          TODO(confirm)   what the participant said the condition was, before unblinding
+protocol hash           TODO(confirm)   session.json → protocol_hash, and the commit that carries prereg.yaml
+claim                   a single self-run supports no efficacy claim
+```
+
 ## Not settled
 
 - **Which Emotiv, and how.** Raw EEG on EPOC X requires a paid Developer licence; Insight exposes it

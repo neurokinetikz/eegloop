@@ -222,6 +222,19 @@ def _oddball_cues(n: int = 60, start_s: float = 5.0, every_s: float = 1.8, targe
     return [(start_s + i * every_s, "target" if i % target_every == 3 else "standard") for i in range(n)]
 
 
+def _eo_ec_cues(n: int = 19, start_s: float = 4.0, period_s: float = 6.0) -> list[tuple[float, str]]:
+    """Alternating eyes-closed / eyes-open periods, each announced by a cue at its start."""
+    return [(start_s + i * period_s, "closed" if i % 2 == 0 else "open") for i in range(n)]
+
+
+def _eo_ec_bursts(cues: list[tuple[float, str]], period_s: float = 6.0, amplitude_uv: float = 18.0) -> tuple[tuple[float, float, float], ...]:
+    """An alpha burst covering every 'closed' period: the planted answer the eo-ec decoder is scored against."""
+    return tuple((t, period_s, amplitude_uv) for t, label in cues if label == "closed")
+
+
+_EO_EC_CUES = _eo_ec_cues()
+
+
 #: Named scenarios: keyword overrides for :func:`make_synthetic_stream`. ``clean`` plants nothing.
 SCENARIOS: dict[str, dict[str, Any]] = {
     "clean": {"alpha_bursts": (), "blink_times_s": (), "gap": None, "drift_ppm": 0.0, "flicker": (),
@@ -239,6 +252,10 @@ SCENARIOS: dict[str, dict[str, Any]] = {
                   "ch_names": ("C3", "Cz", "C4", "O1"), "cues": _mi_cues()},
     "p300": {"alpha_bursts": (), "blink_times_s": (), "gap": None, "flicker": (),
              "ch_names": ("Pz", "Cz", "O1", "O2"), "cues": _oddball_cues()},
+    # eyes closed against eyes open on the default four channels: the one two-class state both montage
+    # classes the course names can decode (posterior alpha reaches TP9/TP10 at 0.6 of its O1/O2 weight)
+    "eo-ec": {"blink_times_s": (), "gap": None, "flicker": (), "alpha_uv": 4.0,
+              "cues": _EO_EC_CUES, "alpha_bursts": _eo_ec_bursts(_EO_EC_CUES)},
 }
 
 

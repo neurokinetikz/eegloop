@@ -33,6 +33,8 @@ eegloop run --protocol loop/configs/alpha-up-synthetic.yaml      # a 2-min alpha
 eegloop budget --protocol loop/configs/alpha-up-synthetic.yaml   # what its chain declares
 eegloop probe  --protocol loop/configs/alpha-up-replay.yaml      # what the loopback probe measures
 eegloop run --protocol loop/configs/mi-2class-synthetic.yaml     # calibrate, fit, freeze, apply, score
+eegloop run --protocol loop/configs/eo-ec-synthetic.yaml         # the same, on a state four channels can decode
+eegloop run --protocol loop/configs/alpha-up-oc4-replay.yaml     # the alpha loop over the shipped four-channel asset
 eegloop check --source synthetic:clean --seconds 10 --mains 60   # the acceptance report, on a stream with no device
 ```
 
@@ -43,7 +45,10 @@ rewards, cues, gaps, phases, the baseline as fixed), `signal.npz` (the per-block
 `loop/examples/alpha_bar.py` is the smallest application: the same run with a presenter you wrote.
 A BCI protocol adds `decoder.npz` — the frozen decoder, arrays and a report, loadable with numpy
 alone — and its decisions are scored against the cues of the apply phase with the chance band beside
-the number; `loop/examples/cue_switch.py` is the two-way switch.
+the number; `loop/examples/cue_switch.py` is the two-way switch on planted imagery, `loop/examples/eo_ec_switch.py` the same loop on eyes closed against eyes open — the state a
+four-channel headband can actually decode — and `loop/examples/blink_switch.py` an EOG switch,
+labelled as such. Lesson L7.16 builds an application from these three and `tests/test_examples.py`
+runs them the way a learner does, on the synthetic stream and on the shipped asset.
 
 The budget lesson L7.3 spends its length on, computed from a chain's own declared delays:
 
