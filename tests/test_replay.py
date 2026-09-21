@@ -11,8 +11,8 @@ import pytest
 from eegloop import Block, Reblocker
 from eegloop.sources import ReplaySource, Source, SyntheticSource, blocks, open_source, read_recording
 
-REPO = Path(__file__).resolve().parents[2]
-ASSET = REPO / "site" / "public" / "data" / "widgets" / "w-latency-budget" / "alpha-ec.bin"
+LOOP = Path(__file__).resolve().parents[1]          # the package root, whether or not the site is beside it
+ASSET = LOOP / "assets" / "alpha-ec.bin"            # the site's shipped asset, mirrored here (assets/README.md)
 
 
 def _contract(bs, n_channels):

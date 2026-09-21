@@ -26,8 +26,9 @@ SEED = 20260920
 
 #: The SciPy reference the site's latency widget is tested against (data/scripts/make_latency_fixtures.py
 #: wrote it; data/manifest.json tracks its sha256). Read here rather than retyped: retyping is the
-#: drift the manifest exists to prevent.
-REFERENCE = REPO / "site" / "public" / "data" / "widgets" / "w-latency-budget" / "traces.json"
+#: drift the manifest exists to prevent. loop/assets/ mirrors the site's copy so a standalone checkout
+#: of this package has it; tests/test_assets_mirror.py holds the two copies byte-equal.
+REFERENCE = LOOP / "assets" / "traces.json"
 
 
 @pytest.fixture(scope="session")
@@ -38,7 +39,7 @@ def spec() -> dict:
 @pytest.fixture(scope="session")
 def reference() -> dict:
     if not REFERENCE.exists():
-        pytest.skip(f"shipped reference not present: {REFERENCE.relative_to(REPO)}")
+        pytest.skip(f"shipped reference not present: {REFERENCE.relative_to(LOOP)}")
     return json.loads(REFERENCE.read_text(encoding="utf-8"))["reference"]
 
 

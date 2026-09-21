@@ -10,7 +10,7 @@ buffer_convention: block-period
 
 source:
   kind: replay
-  path: ../../site/public/data/widgets/w-latency-budget/oc4-ec.bin   # relative to this file
+  path: ../assets/oc4-ec.bin        # relative to this file; a mirror of the site's shipped asset (assets/README.md)
   pace: fast
   loop: false
 

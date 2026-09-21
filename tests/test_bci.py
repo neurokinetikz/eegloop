@@ -22,8 +22,8 @@ from eegloop.steps import Chain
 from eegloop.steps.causal_filter import CausalFIR, fir_taps
 
 SEED = 20260920
-REPO = Path(__file__).resolve().parents[2]
-SHARED = REPO / "notebooks" / "_shared"
+REPO = Path(__file__).resolve().parents[2]         # the monorepo, when this package sits inside it
+SHARED = REPO / "notebooks" / "_shared"             # absent in a standalone checkout: the tests that need it skip
 
 
 def _decode():

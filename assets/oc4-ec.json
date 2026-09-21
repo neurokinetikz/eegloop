@@ -1,0 +1,50 @@
+{
+ "channels": [
+  "O1",
+  "O2",
+  "T7",
+  "T8"
+ ],
+ "sfreq": 160.0,
+ "source_sfreq": 160.0,
+ "units": "uV",
+ "dataset": "ds-eegbci",
+ "dataset_name": "EEG Motor Movement/Imagery Dataset (EEGMMIDB), PhysioNet v1.0.0",
+ "subject": "S001",
+ "run": "R02",
+ "t0_s": 0.0,
+ "duration_s": 60.0,
+ "reference": "TODO(confirm) (online reference not recorded in the catalog)",
+ "filters_applied": [
+  "per-channel mean subtracted over the 60-s page (DC offset removed); no filtering, no resampling, no re-referencing"
+ ],
+ "hardware_filters": "none (recorded with no online filter or notch; PhysioNet)",
+ "mains_hz": 60,
+ "license": "ODC-By-1.0",
+ "license_name": "Open Data Commons Attribution License v1.0 (ODC-By 1.0)",
+ "source_doi": "10.13026/C28G6P",
+ "source_url": "https://physionet.org/content/eegmmidb/1.0.0/",
+ "citation": "Schalk, G., McFarland, D.J., Hinterberger, T., Birbaumer, N., & Wolpaw, J.R. (2004). BCI2000: A General-Purpose Brain-Computer Interface (BCI) System. IEEE Transactions on Biomedical Engineering, 51(6), 1034-1043. doi:10.1109/TBME.2004.827072. Goldberger, A.L., et al. (2000). PhysioBank, PhysioToolkit, and PhysioNet. Circulation, 101(23), e215-e220. doi:10.1161/01.CIR.101.23.e215",
+ "derivative": true,
+ "derivative_note": "Derivative of the cited dataset: cropped to the channels and time window stated here; any filtering or resampling is listed in filters_applied.",
+ "generated_by": "data/scripts/make_consumer_replay.py",
+ "generated_at": "2026-09-21T14:02:31+00:00",
+ "label_source": "algorithmic",
+ "source_file": "S001R02.edf",
+ "condition": "eyes-closed",
+ "trace_id": "oc4-ec",
+ "montage": "occipitotemporal-4",
+ "montage_note": "montage emulation on a gel research recording; not a consumer recording. These four sites are the occipitotemporal-4 geometry exactly, taken from the 64-channel cap; a headband's electrodes, contact, reference and front-end are not emulated by this.",
+ "channel_name_map": {
+  "T7..": "T7",
+  "T8..": "T8",
+  "O1..": "O1",
+  "O2..": "O2"
+ },
+ "widget": "w-latency-budget",
+ "purpose": "replayed block by block by the feedback mode, and by the L7.16 CI job through eegloop run --source replay",
+ "n_samples": 9600,
+ "dtype": "float32-le",
+ "layout": "channels x samples, row-major",
+ "bytes": 153600
+}

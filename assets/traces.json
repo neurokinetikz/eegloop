@@ -1,0 +1,405 @@
+{
+ "sfreq": 160.0,
+ "units": "uV",
+ "traces": [
+  {
+   "id": "alpha-ec",
+   "label": "Eyes closed, occipital alpha (replay trace)",
+   "asset": "alpha-ec",
+   "channel": "O1",
+   "sfreq": 160.0,
+   "duration_s": 10.0,
+   "condition": "eyes-closed",
+   "synthetic": false,
+   "notes": "ds-eegbci S001 R02 (eyes-closed), O1, t0=50.0 s; median 8-12 Hz envelope 97.8 µV; 160 Hz native, no hardware filters, no resampling."
+  },
+  {
+   "id": "alpha-eo",
+   "label": "Eyes open, low alpha (contrast)",
+   "asset": "alpha-eo",
+   "channel": "O1",
+   "sfreq": 160.0,
+   "duration_s": 10.0,
+   "condition": "eyes-open",
+   "synthetic": false,
+   "notes": "ds-eegbci S001 R01 (eyes-open), O1, t0=1.0 s; median 8-12 Hz envelope 10.6 µV; 160 Hz native, no hardware filters, no resampling."
+  },
+  {
+   "id": "splice-eo-ec",
+   "label": "Eyes open -> eyes closed at 5 s (synthetic splice)",
+   "asset": "splice-eo-ec",
+   "channel": "O1",
+   "sfreq": 160.0,
+   "duration_s": 10.0,
+   "condition": "eyes-open -> eyes-closed (spliced)",
+   "synthetic": true,
+   "splice_t_s": 5.0,
+   "notes": "SYNTHETIC. 5 s of the alpha-eo trace followed by 5 s of the alpha-ec trace, joined at t = 5 s with no cross-fade (step 68 µV; median 8-12 Hz envelope 9.8 -> 84.6 µV). Use it for the detection delay of the alpha step and for the filter transient at the join."
+  }
+ ],
+ "default_band_hz": [
+  8.0,
+  12.0
+ ],
+ "band_hz": [
+  8.0,
+  12.0
+ ],
+ "band_note": "Every filter in the menu is an 8-12 Hz band-pass because L7.3's pipeline is alpha-envelope feedback (spec section 6). The band is fixed by the lesson, not by a widget control.",
+ "controls": {
+  "filter": {
+   "options": [
+    "fir-65",
+    "fir-129",
+    "fir-257",
+    "fir-513",
+    "iir-butter-2",
+    "iir-butter-4",
+    "iir-butter-6",
+    "iir-butter-8",
+    "zero-phase-butter-2",
+    "zero-phase-butter-4",
+    "zero-phase-butter-6",
+    "zero-phase-butter-8"
+   ],
+   "default": "iir-butter-4",
+   "note": "ids match reference.designs[].id"
+  },
+  "block_samples": {
+   "options": [
+    16,
+    32,
+    64,
+    128
+   ],
+   "default": 32,
+   "as_ms": {
+    "16": 100.0,
+    "32": 200.0,
+    "64": 400.0,
+    "128": 800.0
+   },
+   "note": "the acquisition block: the number of samples that must arrive before the pipeline is handed anything at all"
+  },
+  "processing_ms": {
+   "min": 0.0,
+   "max": 100.0,
+   "step": 1.0,
+   "default": 10.0
+  }
+ },
+ "latency_terms": [
+  {
+   "id": "buffer",
+   "label": "Acquisition buffer",
+   "formula_ms": "block_samples / sfreq * 1000",
+   "note": "The delay of the OLDEST sample in a block: it waits a whole block before the block is delivered. The AVERAGE sample waits half a block. The widget should show which of the two it is adding; both are defensible, and quoting one while meaning the other is the commonest error in a latency budget.",
+   "alternatives": {
+    "worst_case_ms": "block_samples / sfreq * 1000",
+    "mean_ms": "block_samples / sfreq * 1000 / 2"
+   }
+  },
+  {
+   "id": "filter",
+   "label": "Filter group delay",
+   "formula_ms": "group_delay_samples / sfreq * 1000",
+   "note": "Read group_delay_samples from reference.designs[]. For FIR linear phase it is exactly (numtaps - 1) / 2 at every frequency. For IIR it varies with frequency and is quoted here at 10 Hz. For a zero-phase design it is 0 -- and that design has no causal implementation at all (see reference.designs[].realtime_note and lookahead_ms)."
+  },
+  {
+   "id": "processing",
+   "label": "Processing",
+   "formula_ms": "processing_ms",
+   "note": "Whatever the analysis step costs once the samples are in hand. A user control, because it is a property of the implementation, not of the signal."
+  }
+ ],
+ "total_ms": "buffer + filter + processing",
+ "total_note": "The readout decomposes the total into the three terms above (CONTRACTS Phase 4 addendum: 'the readout must decompose the total ... rather than print one number'). A zero-phase filter contributes 0 to the filter term and makes the total meaningless, because the pipeline cannot run at all; the widget must say that rather than print a smaller number.",
+ "reference": {
+  "sfreq": 160.0,
+  "band_hz": [
+   8.0,
+   12.0
+  ],
+  "group_delay_at_hz": 10.0,
+  "stopband_probe_hz": [
+   5.0,
+   15.0
+  ],
+  "stopband_target_db": -20.0,
+  "stopband_note": "attenuation at 5 and 15 Hz relative to 10 Hz; meets_stopband_target is true when both are at or below -20 dB",
+  "tool": "scipy 1.15.3",
+  "designs": [
+   {
+    "id": "fir-65",
+    "family": "fir",
+    "causal": true,
+    "label": "FIR linear phase, 65 taps",
+    "scipy_call": "scipy.signal.firwin(65, [8, 12], fs=160, pass_zero=False, window='hamming')",
+    "numtaps": 65,
+    "group_delay_samples": 32.0,
+    "group_delay_ms": 200.0,
+    "group_delay_samples_scipy_at_10hz": 32.0,
+    "group_delay_frequency_dependent": false,
+    "measured_lag_samples": 32,
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -24.96,
+     "15": -24.94
+    },
+    "meets_stopband_target": true
+   },
+   {
+    "id": "fir-129",
+    "family": "fir",
+    "causal": true,
+    "label": "FIR linear phase, 129 taps",
+    "scipy_call": "scipy.signal.firwin(129, [8, 12], fs=160, pass_zero=False, window='hamming')",
+    "numtaps": 129,
+    "group_delay_samples": 64.0,
+    "group_delay_ms": 400.0,
+    "group_delay_samples_scipy_at_10hz": 64.0,
+    "group_delay_frequency_dependent": false,
+    "measured_lag_samples": 64,
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -54.29,
+     "15": -54.07
+    },
+    "meets_stopband_target": true
+   },
+   {
+    "id": "fir-257",
+    "family": "fir",
+    "causal": true,
+    "label": "FIR linear phase, 257 taps",
+    "scipy_call": "scipy.signal.firwin(257, [8, 12], fs=160, pass_zero=False, window='hamming')",
+    "numtaps": 257,
+    "group_delay_samples": 128.0,
+    "group_delay_ms": 800.0,
+    "group_delay_samples_scipy_at_10hz": 128.0,
+    "group_delay_frequency_dependent": false,
+    "measured_lag_samples": 128,
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -62.66,
+     "15": -63.18
+    },
+    "meets_stopband_target": true
+   },
+   {
+    "id": "fir-513",
+    "family": "fir",
+    "causal": true,
+    "label": "FIR linear phase, 513 taps",
+    "scipy_call": "scipy.signal.firwin(513, [8, 12], fs=160, pass_zero=False, window='hamming')",
+    "numtaps": 513,
+    "group_delay_samples": 256.0,
+    "group_delay_ms": 1600.0,
+    "group_delay_samples_scipy_at_10hz": 256.0,
+    "group_delay_frequency_dependent": false,
+    "measured_lag_samples": 256,
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -70.19,
+     "15": -70.41
+    },
+    "meets_stopband_target": true
+   },
+   {
+    "id": "iir-butter-2",
+    "family": "iir-butter",
+    "causal": true,
+    "label": "IIR Butterworth, order 2",
+    "scipy_call": "scipy.signal.butter(2, [8, 12], btype='band', fs=160, output='sos')  # then sosfilt (causal)",
+    "order": 2,
+    "n_sections": 2,
+    "group_delay_samples": 17.802755,
+    "group_delay_ms": 111.2672,
+    "group_delay_at_hz": 10.0,
+    "group_delay_method": "sum of the per-second-order-section scipy.signal.group_delay values, cross-checked against a finite difference of the unwrapped sosfreqz phase (they agree to < 0.05 samples or the run stops)",
+    "group_delay_frequency_dependent": true,
+    "measured_lag_samples": 16,
+    "measured_lag_note": "band-average lag against a zero-phase reference on the shipped alpha-ec trace; it differs from the prediction by up to 2 samples because the prediction is quoted at the band centre and the group delay varies across 8-12 Hz",
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -21.89,
+     "15": -13.72
+    },
+    "meets_stopband_target": false
+   },
+   {
+    "id": "iir-butter-4",
+    "family": "iir-butter",
+    "causal": true,
+    "label": "IIR Butterworth, order 4",
+    "scipy_call": "scipy.signal.butter(4, [8, 12], btype='band', fs=160, output='sos')  # then sosfilt (causal)",
+    "order": 4,
+    "n_sections": 4,
+    "group_delay_samples": 32.727137,
+    "group_delay_ms": 204.5446,
+    "group_delay_at_hz": 10.0,
+    "group_delay_method": "sum of the per-second-order-section scipy.signal.group_delay values, cross-checked against a finite difference of the unwrapped sosfreqz phase (they agree to < 0.05 samples or the run stops)",
+    "group_delay_frequency_dependent": true,
+    "measured_lag_samples": 33,
+    "measured_lag_note": "band-average lag against a zero-phase reference on the shipped alpha-ec trace; it differs from the prediction by up to 2 samples because the prediction is quoted at the band centre and the group delay varies across 8-12 Hz",
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -43.73,
+     "15": -27.07
+    },
+    "meets_stopband_target": true
+   },
+   {
+    "id": "iir-butter-6",
+    "family": "iir-butter",
+    "causal": true,
+    "label": "IIR Butterworth, order 6",
+    "scipy_call": "scipy.signal.butter(6, [8, 12], btype='band', fs=160, output='sos')  # then sosfilt (causal)",
+    "order": 6,
+    "n_sections": 6,
+    "group_delay_samples": 48.368038,
+    "group_delay_ms": 302.3002,
+    "group_delay_at_hz": 10.0,
+    "group_delay_method": "sum of the per-second-order-section scipy.signal.group_delay values, cross-checked against a finite difference of the unwrapped sosfreqz phase (they agree to < 0.05 samples or the run stops)",
+    "group_delay_frequency_dependent": true,
+    "measured_lag_samples": 49,
+    "measured_lag_note": "band-average lag against a zero-phase reference on the shipped alpha-ec trace; it differs from the prediction by up to 2 samples because the prediction is quoted at the band centre and the group delay varies across 8-12 Hz",
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -65.59,
+     "15": -40.59
+    },
+    "meets_stopband_target": true
+   },
+   {
+    "id": "iir-butter-8",
+    "family": "iir-butter",
+    "causal": true,
+    "label": "IIR Butterworth, order 8",
+    "scipy_call": "scipy.signal.butter(8, [8, 12], btype='band', fs=160, output='sos')  # then sosfilt (causal)",
+    "order": 8,
+    "n_sections": 8,
+    "group_delay_samples": 64.159335,
+    "group_delay_ms": 400.9958,
+    "group_delay_at_hz": 10.0,
+    "group_delay_method": "sum of the per-second-order-section scipy.signal.group_delay values, cross-checked against a finite difference of the unwrapped sosfreqz phase (they agree to < 0.05 samples or the run stops)",
+    "group_delay_frequency_dependent": true,
+    "measured_lag_samples": 65,
+    "measured_lag_note": "band-average lag against a zero-phase reference on the shipped alpha-ec trace; it differs from the prediction by up to 2 samples because the prediction is quoted at the band centre and the group delay varies across 8-12 Hz",
+    "lookahead_samples_causal": 0.0,
+    "attenuation_db": {
+     "5": -87.45,
+     "15": -54.11
+    },
+    "meets_stopband_target": true
+   },
+   {
+    "id": "zero-phase-butter-2",
+    "family": "zero-phase",
+    "causal": false,
+    "label": "Zero-phase (filtfilt), Butterworth order 2",
+    "scipy_call": "scipy.signal.sosfiltfilt(scipy.signal.butter(2, [8, 12], btype='band', fs=160, output='sos'), x)",
+    "order": 2,
+    "group_delay_samples": 0.0,
+    "group_delay_ms": 0.0,
+    "group_delay_frequency_dependent": false,
+    "lookahead_samples": 83.0,
+    "lookahead_ms": 518.75,
+    "lookahead_criterion": "first impulse-response sample before the impulse exceeding 1 % of the peak (scipy.signal.sosfiltfilt over a 20-s zero array with a unit impulse at the centre)",
+    "attenuation_db": {
+     "5": -43.78,
+     "15": -27.43
+    },
+    "meets_stopband_target": true,
+    "realtime_note": "Zero group delay is bought with future samples. In a ring buffer those samples do not exist yet, so this design has no causal implementation at all: it is not a filter with a latency, it is a filter you cannot run online."
+   },
+   {
+    "id": "zero-phase-butter-4",
+    "family": "zero-phase",
+    "causal": false,
+    "label": "Zero-phase (filtfilt), Butterworth order 4",
+    "scipy_call": "scipy.signal.sosfiltfilt(scipy.signal.butter(4, [8, 12], btype='band', fs=160, output='sos'), x)",
+    "order": 4,
+    "group_delay_samples": 0.0,
+    "group_delay_ms": 0.0,
+    "group_delay_frequency_dependent": false,
+    "lookahead_samples": 145.0,
+    "lookahead_ms": 906.25,
+    "lookahead_criterion": "first impulse-response sample before the impulse exceeding 1 % of the peak (scipy.signal.sosfiltfilt over a 20-s zero array with a unit impulse at the centre)",
+    "attenuation_db": {
+     "5": -87.45,
+     "15": -54.13
+    },
+    "meets_stopband_target": true,
+    "realtime_note": "Zero group delay is bought with future samples. In a ring buffer those samples do not exist yet, so this design has no causal implementation at all: it is not a filter with a latency, it is a filter you cannot run online."
+   },
+   {
+    "id": "zero-phase-butter-6",
+    "family": "zero-phase",
+    "causal": false,
+    "label": "Zero-phase (filtfilt), Butterworth order 6",
+    "scipy_call": "scipy.signal.sosfiltfilt(scipy.signal.butter(6, [8, 12], btype='band', fs=160, output='sos'), x)",
+    "order": 6,
+    "group_delay_samples": 0.0,
+    "group_delay_ms": 0.0,
+    "group_delay_frequency_dependent": false,
+    "lookahead_samples": 186.0,
+    "lookahead_ms": 1162.5,
+    "lookahead_criterion": "first impulse-response sample before the impulse exceeding 1 % of the peak (scipy.signal.sosfiltfilt over a 20-s zero array with a unit impulse at the centre)",
+    "attenuation_db": {
+     "5": -131.18,
+     "15": -81.17
+    },
+    "meets_stopband_target": true,
+    "realtime_note": "Zero group delay is bought with future samples. In a ring buffer those samples do not exist yet, so this design has no causal implementation at all: it is not a filter with a latency, it is a filter you cannot run online."
+   },
+   {
+    "id": "zero-phase-butter-8",
+    "family": "zero-phase",
+    "causal": false,
+    "label": "Zero-phase (filtfilt), Butterworth order 8",
+    "scipy_call": "scipy.signal.sosfiltfilt(scipy.signal.butter(8, [8, 12], btype='band', fs=160, output='sos'), x)",
+    "order": 8,
+    "group_delay_samples": 0.0,
+    "group_delay_ms": 0.0,
+    "group_delay_frequency_dependent": false,
+    "lookahead_samples": 226.0,
+    "lookahead_ms": 1412.5,
+    "lookahead_criterion": "first impulse-response sample before the impulse exceeding 1 % of the peak (scipy.signal.sosfiltfilt over a 20-s zero array with a unit impulse at the centre)",
+    "attenuation_db": {
+     "5": -174.9,
+     "15": -108.23
+    },
+    "meets_stopband_target": true,
+    "realtime_note": "Zero group delay is bought with future samples. In a ring buffer those samples do not exist yet, so this design has no causal implementation at all: it is not a filter with a latency, it is a filter you cannot run online."
+   }
+  ]
+ },
+ "reference_note": "Computed by SciPy in this script so the widget's TypeScript can be checked against SciPy rather than trusted. These are not assets the widget replays; they are the expected values for the designs in the control menu. Every causal design also carries measured_lag_samples: the lag at which that filter, run causally over the shipped alpha-ec trace, best matches a zero-phase reference. A predicted delay that does not appear as a real lag in the real signal stops this script.",
+ "exercise_note": "L7.3's exercise asks for the end-to-end latency of a STATED pipeline. The pipeline it states, and the answer key, belong to content-L7a and the integrator; this file ships the parameter names and the reference numbers they should be stated in, not an answer.",
+ "subject_note": "All traces are ds-eegbci subject S001, channel O1. Window selection is recorded per asset in its sidecar.",
+ "selection": {
+  "alpha-ec": {
+   "t0_s": 50.0,
+   "median_alpha_envelope_uv": 97.75,
+   "run": "R02",
+   "condition": "eyes-closed"
+  },
+  "alpha-eo": {
+   "t0_s": 1.0,
+   "median_alpha_envelope_uv": 10.564,
+   "run": "R01",
+   "condition": "eyes-open"
+  }
+ },
+ "label_source": "algorithmic",
+ "dataset": "ds-eegbci",
+ "generated_by": "data/scripts/make_latency_fixtures.py",
+ "generated_at": "2026-09-18T20:53:31+00:00",
+ "license": "ODC-By-1.0",
+ "license_name": "Open Data Commons Attribution License v1.0 (ODC-By 1.0)",
+ "source_doi": "10.13026/C28G6P",
+ "source_url": "https://physionet.org/content/eegmmidb/1.0.0/",
+ "citation": "Schalk, G., McFarland, D.J., Hinterberger, T., Birbaumer, N., & Wolpaw, J.R. (2004). BCI2000: A General-Purpose Brain-Computer Interface (BCI) System. IEEE Transactions on Biomedical Engineering, 51(6), 1034-1043. doi:10.1109/TBME.2004.827072. Goldberger, A.L., et al. (2000). PhysioBank, PhysioToolkit, and PhysioNet. Circulation, 101(23), e215-e220. doi:10.1161/01.CIR.101.23.e215",
+ "dataset_name": "EEG Motor Movement/Imagery Dataset (EEGMMIDB), PhysioNet v1.0.0"
+}

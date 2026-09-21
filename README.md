@@ -27,28 +27,33 @@ all out is `site/notes/proposal-phase5-consumer-nf-bci.md`; `HARDWARE.md` is the
 ## Quick start (nothing is downloaded, no device)
 
 ```sh
-pip install -e './loop[dev]'
-python -m pytest loop
-eegloop run --protocol loop/configs/alpha-up-synthetic.yaml      # a 2-min alpha session, no device
-eegloop budget --protocol loop/configs/alpha-up-synthetic.yaml   # what its chain declares
-eegloop probe  --protocol loop/configs/alpha-up-replay.yaml      # what the loopback probe measures
-eegloop run --protocol loop/configs/mi-2class-synthetic.yaml     # calibrate, fit, freeze, apply, score
-eegloop run --protocol loop/configs/eo-ec-synthetic.yaml         # the same, on a state four channels can decode
-eegloop run --protocol loop/configs/alpha-up-oc4-replay.yaml     # the alpha loop over the shipped four-channel asset
+pip install -e '.[dev]'
+python -m pytest
+eegloop run --protocol configs/alpha-up-synthetic.yaml      # a 2-min alpha session, no device
+eegloop budget --protocol configs/alpha-up-synthetic.yaml   # what its chain declares
+eegloop probe  --protocol configs/alpha-up-replay.yaml      # what the loopback probe measures
+eegloop run --protocol configs/mi-2class-synthetic.yaml     # calibrate, fit, freeze, apply, score
+eegloop run --protocol configs/eo-ec-synthetic.yaml         # the same, on a state four channels can decode
+eegloop run --protocol configs/alpha-up-oc4-replay.yaml     # the alpha loop over the shipped four-channel asset
 eegloop check --source synthetic:clean --seconds 10 --mains 60   # the acceptance report, on a stream with no device
 ```
+
+Run from **this directory**. Inside the course monorepo that is `loop/`, so prefix the paths
+(`pip install -e './loop[dev]'`, `python -m pytest loop`, `--protocol loop/configs/…`); in a clone of the
+standalone package repository it is the root and the lines above run as written.
 
 `run` writes `sessions/<name>/` beside the protocol: `session.json` (versions, the protocol's hash,
 the budget with the processing row *measured*, the sealed sham token), `events.jsonl` (gate closures,
 rewards, cues, gaps, phases, the baseline as fixed), `signal.npz` (the per-block series) and
 `protocol-resolved.json` (every decision, defaults filled in). Nothing in it names the machine.
-`loop/examples/alpha_bar.py` is the smallest application: the same run with a presenter you wrote.
+`examples/alpha_bar.py` is the smallest application: the same run with a presenter you wrote.
 A BCI protocol adds `decoder.npz` — the frozen decoder, arrays and a report, loadable with numpy
 alone — and its decisions are scored against the cues of the apply phase with the chance band beside
-the number; `loop/examples/cue_switch.py` is the two-way switch on planted imagery, `loop/examples/eo_ec_switch.py` the same loop on eyes closed against eyes open — the state a
-four-channel headband can actually decode — and `loop/examples/blink_switch.py` an EOG switch,
-labelled as such. Lesson L7.16 builds an application from these three and `tests/test_examples.py`
-runs them the way a learner does, on the synthetic stream and on the shipped asset.
+the number; `examples/cue_switch.py` is the two-way switch on planted imagery, `examples/eo_ec_switch.py`
+the same loop on eyes closed against eyes open — the state a four-channel headband can actually decode —
+and `examples/blink_switch.py` an EOG switch, labelled as such. Lesson L7.16 builds an application from
+these three and `tests/test_examples.py` runs them the way a learner does, on the synthetic stream and on
+the shipped asset.
 
 The budget lesson L7.3 spends its length on, computed from a chain's own declared delays:
 
@@ -289,7 +294,7 @@ constant and a Welch window are facts about a *decision*. The budget keeps them 
 
 `python -m pytest loop` — no network, no device, seconds. `tests/test_latency.py` reads the SciPy
 reference the site's latency widget is itself tested against
-(`site/public/data/widgets/w-latency-budget/traces.json`) rather than retyping its numbers, and
+(`assets/traces.json`, mirrored from the site) rather than retyping its numbers, and
 asserts the L7.3 pipeline at 610.00 ms causal and 1010.00 ms zero-phase-live.
 `tests/test_parity_helpers_l7.py` holds this package to `notebooks/_shared/helpers_l7.py` to 1e-12;
 under CI that import is hard, so the guard cannot skip itself away. `tests/test_neutrality.py`

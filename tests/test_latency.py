@@ -1,7 +1,7 @@
 """The latency budget against the shipped SciPy reference, and the lesson's own worked example.
 
 Every number here is one the course already quotes: the reference designs in
-site/public/data/widgets/w-latency-budget/traces.json (the widget's own cross-check), and the
+assets/traces.json (the site's shipped SciPy reference, mirrored into this package), and the
 610.00 ms pipeline of lesson L7.3. This package is the third implementation of the same quantities;
 the house pattern is that independent implementations agree on published numbers.
 """

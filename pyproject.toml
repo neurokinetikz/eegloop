@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Streaming EEG loops for the Scalp to Source course: one Source, one Block, causal steps that declare their delay, and a latency budget you can measure."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 keywords = ["eeg", "real-time", "neurofeedback", "bci", "streaming"]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -49,6 +49,12 @@ packages = ["eegloop", "eegloop.steps", "eegloop.sources", "eegloop.feedback", "
 
 [tool.setuptools.package-data]
 eegloop = ["py.typed"]
+
+# The configs, the examples and the five mirrored assets travel with the source tree (a git clone or an
+# sdist), not inside the wheel: `eegloop run --protocol configs/...` names a file in the checkout, and a
+# 160 KB replay trace has no business in every installed copy. sdist carries them so a release is complete.
+[tool.setuptools.sdist]
+include = ["configs/*", "examples/*", "assets/*", "LICENSE", "HARDWARE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
