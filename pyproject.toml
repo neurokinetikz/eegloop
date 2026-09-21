@@ -52,9 +52,8 @@ eegloop = ["py.typed"]
 
 # The configs, the examples and the five mirrored assets travel with the source tree (a git clone or an
 # sdist), not inside the wheel: `eegloop run --protocol configs/...` names a file in the checkout, and a
-# 160 KB replay trace has no business in every installed copy. sdist carries them so a release is complete.
-[tool.setuptools.sdist]
-include = ["configs/*", "examples/*", "assets/*", "LICENSE", "HARDWARE.md"]
+# 160 KB replay trace has no business in every installed copy. MANIFEST.in is what puts them in the sdist
+# (setuptools has no pyproject table for it), so a release is a complete checkout.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

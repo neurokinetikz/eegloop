@@ -1,0 +1,13 @@
+# What travels in the sdist beyond the package itself. The wheel carries eegloop/ and py.typed only
+# (pyproject's package-data): a protocol is a file you edit in a checkout, and a 160 KB replay trace has no
+# business in every installed copy. An sdist, though, should be a complete checkout — the configs the README
+# runs, the examples lesson L7.16 builds on, the mirrored assets those configs replay, the tests, and the
+# two documents. setuptools has no pyproject table for this; this file is the mechanism.
+include LICENSE
+include README.md
+include HARDWARE.md
+recursive-include configs *.yaml
+recursive-include examples *.py
+recursive-include assets *.bin *.json *.md
+recursive-include tests *.py
+global-exclude __pycache__/* *.py[cod]
