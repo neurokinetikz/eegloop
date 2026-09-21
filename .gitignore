@@ -1,0 +1,19 @@
+# This file travels with the package: the monorepo's root .gitignore does not survive `git subtree split`,
+# so a clone of the mirror needs its own. Everything here is something the README's own quick start creates.
+
+# `pip install -e .`
+*.egg-info/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# what `eegloop run` writes beside a protocol (output.dir): a learner's sessions are theirs, never the
+# repository's, and they can carry a recording — `--out` sends them anywhere else
+sessions/
+**/sessions/
+
+# test and build artefacts
+.pytest_cache/
+dist/
+build/
