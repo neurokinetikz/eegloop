@@ -2,8 +2,8 @@
 
 scripts/check-content.ts greps site content, the catalog, the notebooks and public data for the
 patterns below; loop/ is outside those roots, so this test applies the same patterns here. Vendor
-names are checked separately: in this phase no headset vendor is named anywhere in the package; the
-phase that adds hardware sources will add an allowlist of exactly one board table.
+names are checked separately: a headset is named in the board table, in the README's copy of it and
+in HARDWARE.md, and described by montage class everywhere else.
 """
 from __future__ import annotations
 
@@ -28,8 +28,9 @@ FORBIDDEN = [
 _VENDORS = ["".join(p) for p in (("Mu", "se"), ("Brain", "Bit"), ("Emo", "tiv"), ("Neuro", "sity"),
                                   ("Open", "BCI"), ("Inter", "aXon"), ("EP", "OC"))]
 VENDOR = re.compile(r"\b(" + "|".join(_VENDORS) + r")\b")
-#: Files allowed to name a vendor. Empty in this phase; the hardware phase adds its board table.
-VENDOR_ALLOWLIST: set[str] = set()
+#: Files allowed to name a vendor: the one board table (CONTRACTS Phase 5, rule 4), the README's copy of
+#: it, and HARDWARE.md, which records per-device facts with their verified dates. Nothing else.
+VENDOR_ALLOWLIST: set[str] = {"eegloop/sources/brainflow.py", "README.md", "HARDWARE.md"}
 
 
 def _files():

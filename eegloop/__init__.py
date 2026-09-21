@@ -59,6 +59,7 @@ from .session import (
     load_protocol, resolved, run_protocol, scrub_paths, validate_protocol,
 )
 from .analysis import crednf_report, learning_test, naive_trend, session_change
+from .check import render_check, run_check
 from .bci import (
     BCILoop, BCIStats, Calibrator, Decision, DwellDecision, EpochCutter, FrozenDecoder, SSVEPDetector, StreamingPosterior,
     chance_interval, cut_epochs, fit_frozen, ssvep_cca, ssvep_decide, temporal_split,
@@ -87,6 +88,7 @@ __all__ = [
     "Protocol", "ProtocolError", "load_protocol", "validate_protocol", "resolved", "SessionLog", "SessionReader",
     "Recorder", "export_fif", "SessionResult", "run_protocol", "build_source", "scrub_paths",
     "naive_trend", "session_change", "learning_test", "crednf_report",
+    "run_check", "render_check",
     "BCILoop", "BCIStats", "Calibrator", "Decision", "DwellDecision", "EpochCutter", "FrozenDecoder", "SSVEPDetector",
     "StreamingPosterior", "chance_interval", "cut_epochs", "fit_frozen", "ssvep_cca", "ssvep_decide", "temporal_split",
     "installed_versions", "check_pins", "seed_everything", "config_hash",

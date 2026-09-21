@@ -112,7 +112,7 @@ def test_loop_and_crop(rng):
 def test_open_source_dispatch():
     assert isinstance(open_source("synthetic:clean", duration_s=4.0), SyntheticSource)
     assert isinstance(open_source({"kind": "synthetic", "scenario": "clean", "duration_s": 4.0}), Source)
-    with pytest.raises(ValueError, match="later phase"):
+    with pytest.raises(ValueError, match="unknown board key|binding decision"):
         open_source("brainflow:some-board")
     with pytest.raises(ValueError, match="unknown source kind"):
         open_source("telepathy")

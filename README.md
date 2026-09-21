@@ -19,8 +19,10 @@ all at once, a session log a notebook opens with numpy alone, a recorder that wr
 asset format, a command line, and the valid learning test beside the invalid one; and the BCI loop —
 epochs cut on a stated clock, three decoders fitted in cue order and *frozen* into arrays that replay
 them exactly without scikit-learn, a sliding and a cue-locked way to apply one, a steady-state
-detector, and a protocol that calibrates, fits, applies and scores in one run. What is not here yet:
-the hardware sources. The proposal that lays them out is `site/notes/proposal-phase5-consumer-nf-bci.md`.
+detector, and a protocol that calibrates, fits, applies and scores in one run; and the headset source —
+one driver behind the same interface, a board table of verified facts, and `eegloop check`, the
+acceptance report that measures on a live stream what a table cannot state. The proposal that lays it
+all out is `site/notes/proposal-phase5-consumer-nf-bci.md`; `HARDWARE.md` is the device page.
 
 ## Quick start (nothing is downloaded, no device)
 
@@ -31,6 +33,7 @@ eegloop run --protocol loop/configs/alpha-up-synthetic.yaml      # a 2-min alpha
 eegloop budget --protocol loop/configs/alpha-up-synthetic.yaml   # what its chain declares
 eegloop probe  --protocol loop/configs/alpha-up-replay.yaml      # what the loopback probe measures
 eegloop run --protocol loop/configs/mi-2class-synthetic.yaml     # calibrate, fit, freeze, apply, score
+eegloop check --source synthetic:clean --seconds 10 --mains 60   # the acceptance report, on a stream with no device
 ```
 
 `run` writes `sessions/<name>/` beside the protocol: `session.json` (versions, the protocol's hash,
@@ -83,6 +86,8 @@ import eegloop
 | `eegloop.probe` | `make_probe`, `energy_centroid`, `run_offline(chain, x)`, `measure_loop_delay(chain_factory)`. |
 | `eegloop.sources` | `Source` — the one interface (`info`, `start`, `read`, `stop`, `clock_now`, `done`); `open_source('synthetic:<scenario>' \| 'replay:<path>')`; `blocks(source, block_samples)`; `ListMarkers` — cues released as the source clock passes them. |
 | `eegloop.sources.synthetic` | `make_synthetic_stream` and `SyntheticSource` with `SCENARIOS` (`clean`, `alpha-schedule`, `blinks`, `gaps`, `flat-channel`, `line-noise`, `pops`, `ssvep`, `mi-2class`, `p300`) and a `truth` dict naming every planted answer: alpha bursts, frontal blinks, a dropped-sample gap that shows in the timestamps, clock drift in ppm, a flicker component, cues with an evoked response and a lateralised power change, single-channel electrode pops, a flat channel. |
+| `eegloop.sources.brainflow` | `BrainFlowSource(board_key)` — the driver behind the `Source` interface; `BOARDS`, the one table that names a device; blocks split at every loss the package counter shows, timestamps rebased to the session; pairing details from the environment, never from a protocol or into a log. |
+| `eegloop.check` | `run_check(source, seconds=…)` and `render_check` — rate measured against rate claimed, drops, timestamp structure, per-channel DC/spread/flat/line/bandwidth-edge and gate-label prevalence, verdicts in `first_look_checks`' names. Works on any source. |
 | `eegloop.sources.replay` | `ReplaySource` — arrays, `.npz`, `.csv`, `.bin` + JSON sidecar (`from_asset`), `.fif`/`.edf`/`.bdf` via the `mne` extra; `pace='wall'` releases samples on the clock; `inject_gaps` removes samples so the timestamps jump; reads never straddle a gap. `read_recording` is the reader alone. |
 | `eegloop.steps.quality` | `QualityGate` — runs **first, on the raw block**; `flat`, `pop`, `blink` (frontal channels only, and it says when there are none), `emg`, `line-noise`, `gap`; thresholds ported from `data/scripts/detectors.py` and cited; a three-state verdict with a hold; a *decision* delay, never a signal delay. |
 | `eegloop.steps.reference` | `Reference('none' \| 'average' \| 'channels')` — zero delay, exact; reports its rank cost. |
@@ -177,6 +182,18 @@ standing posterior alpha *is* a 10 Hz oscillation. Stimulus frequencies belong o
 score means nothing without a no-stimulus baseline. `SSVEP_NOTE` says so wherever the detector is
 described.
 
+**A device is named once.** The board table below is copied from `eegloop.sources.brainflow.BOARDS`;
+`HARDWARE.md` holds the per-device facts with their verified dates and the list of what a report
+must still settle. Everywhere else a device is its montage class. `tests/test_neutrality.py` holds the
+package to that with an allowlist of exactly these three files.
+
+| key | product | driver id | montage | channels | rate | transport | verified |
+|---|---|---|---|---|---|---|---|
+| `muse-2` | Muse 2 | `MUSE_2_BOARD` | frontotemporal-4 | TP9, AF7, AF8, TP10 | 256 Hz | native Bluetooth LE, no dongle | 2026-09-20 |
+| `muse-s` | Muse S | `MUSE_S_BOARD` | frontotemporal-4 | TP9, AF7, AF8, TP10 | 256 Hz | native Bluetooth LE, no dongle | 2026-09-20 |
+| `muse-s-athena` | Muse S Athena | `MUSE_S_ANTHENA_BOARD` | frontotemporal-4 | TP9, AF7, AF8, TP10 | 256 Hz | native Bluetooth LE, no dongle | 2026-09-20 |
+| `brainbit` | BrainBit | `BRAINBIT_BOARD` | occipitotemporal-4 | O1, O2, T7, T8 | 250 Hz | native Bluetooth LE, no dongle | 2026-09-20 |
+
 ## Two words that mean two things in this repository
 
 **Pop.** `data/scripts/detectors.py` defines an electrode pop as an abrupt *sustained* step on one
@@ -204,7 +221,11 @@ recording re-opens as an asset, and no file names the machine. `tests/test_proto
 same message formats `pipelines/tests/test_config.py` does. `tests/test_bci.py` holds the frozen
 arithmetic to scikit-learn's and pyriemann's, the online cut to the offline one to the sample, the
 chance band to `helpers_l6`, and the decoders to the planted answers; `tests/test_bci_session.py` runs
-the two BCI protocols end to end. Hardware and network tests carry markers and never run by default.
+the two BCI protocols end to end. `tests/test_brainflow_source.py` drives the headset source with a
+fake board that has the driver's interface — a planted loss of five packets, a counter that wraps,
+stamps identical within a packet — and `tests/test_check.py` runs the report on planted facts.
+`tests/test_hardware.py` is the one test that needs a headset: it runs only with
+`EEGLOOP_HARDWARE=<key>` and never by default.
 
 ## Dependencies
 
@@ -212,12 +233,14 @@ Core: `numpy>=2.1,<3`, `scipy>=1.15,<2` — the ranges `notebooks/requirements.t
 extra (`mne`) for reading recording formats and `export_fif`, not a dependency of the loop. PyYAML is
 imported lazily by `load_protocol` and named when missing; a JSON protocol needs nothing. Fitting a
 decoder needs the `decode` extra (scikit-learn, pyriemann), imported lazily and named when missing;
-*applying* a frozen decoder needs neither. Hardware drivers are extras the later sources import
-lazily and fail without by naming the package. `dev` carries `mne==1.10.2` so the parity tests run,
-PyYAML so the shipped protocols load, and the `decode` pair so the BCI tests run rather than skip.
+*applying* a frozen decoder needs neither. The headset driver is the `brainflow` extra, imported
+lazily and named when missing; the fake-board tests need nothing. `dev` carries `mne==1.10.2` so the
+parity tests run, PyYAML so the shipped protocols load, and the `decode` pair so the BCI tests run
+rather than skip.
 
 ## What this package does not do
 
 It does not download data, preprocess a recording offline, or evaluate a decoder across subjects —
 those are the notebooks, `eegpipe` and `helpers_l7`'s benchmarking harness. It does not name a
-headset outside one board table (added with the hardware sources), and it never ships a recording.
+headset outside the board table, `HARDWARE.md` and this file's copy of the table, and it never ships
+a recording.

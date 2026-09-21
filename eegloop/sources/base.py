@@ -34,8 +34,8 @@ class Source(Protocol):
 def open_source(spec: str | Mapping[str, Any], **kw: Any) -> Source:
     """``'synthetic'``, ``'synthetic:<scenario>'``, ``'replay:<path>'`` -- or a mapping with a ``kind``.
 
-    The hardware kinds are named here so a protocol file can already say what it means; they arrive
-    in a later phase and until then say so instead of failing obscurely.
+    ``'brainflow:<board-key>'`` opens a headset the driver supports (``eegloop devices`` lists the keys);
+    ``'lsl'`` is named so a protocol can say what it means and refuses until its binding is chosen.
     """
     if isinstance(spec, Mapping):
         opts = {k: v for k, v in spec.items() if k != "kind"}
@@ -54,8 +54,13 @@ def open_source(spec: str | Mapping[str, Any], **kw: Any) -> Source:
         from .replay import ReplaySource
 
         return ReplaySource(**opts)
-    if kind in ("brainflow", "lsl"):
-        raise ValueError(f"{kind!r} sources arrive in a later phase of eegloop; see loop/README.md")
+    if kind == "brainflow":
+        from .brainflow import BrainFlowSource
+
+        return BrainFlowSource(**opts)
+    if kind == "lsl":
+        raise ValueError("the 'lsl' source waits on the binding decision (loop/pyproject.toml, the lsl extra); "
+                         "a headset the driver supports is 'brainflow:<board-key>'")
     raise ValueError(f"unknown source kind {kind!r}; expected one of {', '.join(SOURCE_KINDS)}")
 
 

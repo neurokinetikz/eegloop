@@ -5,9 +5,11 @@
     eegloop probe    --protocol loop/configs/alpha-up-synthetic.yaml
     eegloop run      --protocol loop/configs/alpha-up-synthetic.yaml [--out DIR] [--record-raw] [--quiet]
     eegloop versions
+    eegloop devices                                                   # the driver's board table
+    eegloop check --source brainflow:<key> --seconds 30 [--mains 60] [--out site/notes/device-<key>.md]
 
 Exit codes follow ``eegpipe``: 0 on success, 2 for a protocol problem (every problem is listed), 1 for
-anything else. ``devices`` and ``check`` arrive with the hardware sources.
+anything else -- including a ``check`` with a failed row.
 """
 from __future__ import annotations
 
@@ -51,6 +53,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     ver = sub.add_parser("versions", help="print the versions this environment would record")
     ver.add_argument("--json", action="store_true")
+
+    dev = sub.add_parser("devices", help="the driver's board table: keys, ids, montages, verified facts")
+    dev.add_argument("--json", action="store_true")
+
+    chk = sub.add_parser("check", help="stream from a source and report rate, drops, timestamps and per-channel facts")
+    chk.add_argument("--source", required=True, help="brainflow:<key> | synthetic[:scenario] | replay:<path>")
+    chk.add_argument("--seconds", type=float, default=30.0)
+    chk.add_argument("--mains", type=float, default=None, help="mains frequency for the gate's line-noise label")
+    chk.add_argument("--block", type=int, default=32)
+    chk.add_argument("--out", default=None, help="write the markdown report here (e.g. site/notes/device-<key>.md)")
+    chk.add_argument("--json", action="store_true")
     return parser
 
 
@@ -136,6 +149,44 @@ def _versions(args: argparse.Namespace) -> int:
     return 0
 
 
+def _devices(args: argparse.Namespace) -> int:
+    from .sources.brainflow import board_table, list_boards
+
+    if args.json:
+        print(json.dumps(list_boards(), indent=2, default=str))
+    else:
+        print(board_table())
+        try:
+            import brainflow
+
+            print(f"\ndriver installed: brainflow {getattr(brainflow, '__version__', '?')}")
+        except ImportError:
+            print("\ndriver not installed: pip install 'eegloop[brainflow]'")
+    return 0
+
+
+def _check(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from .check import render_check, run_check
+    from .sources.base import open_source
+
+    src = open_source(args.source, block_samples=args.block)
+    try:
+        report = run_check(src, seconds=args.seconds, block_samples=args.block, mains_hz=args.mains)
+    finally:
+        src.stop()
+    if args.json:
+        print(json.dumps(report, indent=2, default=str))
+    else:
+        text = render_check(report)
+        print(text)
+        if args.out:
+            Path(args.out).write_text(text, encoding="utf-8")
+            print(f"written to {Path(args.out).name}")
+    return 0 if report.get("ok") else 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -149,6 +200,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _probe(args)
         if args.command == "versions":
             return _versions(args)
+        if args.command == "devices":
+            return _devices(args)
+        if args.command == "check":
+            return _check(args)
     except ProtocolError as exc:
         print(str(exc), file=sys.stderr)
         return 2

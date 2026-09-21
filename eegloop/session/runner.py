@@ -46,7 +46,7 @@ def _base_dir(protocol: Protocol) -> Path:
 
 
 def build_source(protocol: Protocol) -> Source:
-    """The source a protocol names. Hardware kinds arrive in a later phase and say so."""
+    """The source a protocol names: synthetic, a replayed recording, or a headset through the driver."""
     cfg = protocol.source
     if cfg.kind == "synthetic":
         return SyntheticSource(cfg.scenario, seed=cfg.seed if cfg.seed is not None else protocol.seed, pace=cfg.pace,
@@ -57,7 +57,11 @@ def build_source(protocol: Protocol) -> Source:
         if not path.is_absolute():
             path = _base_dir(protocol) / path
         return ReplaySource(path, pace=cfg.pace, loop=cfg.loop, block_samples=protocol.block_samples)
-    raise ValueError(f"{cfg.kind!r} sources arrive in a later phase of eegloop; see loop/README.md")
+    if cfg.kind == "brainflow":
+        from ..sources.brainflow import BrainFlowSource
+
+        return BrainFlowSource(str(cfg.board), timeout_s=cfg.timeout_s, block_samples=protocol.block_samples)
+    raise ValueError("the 'lsl' source waits on the binding decision (loop/pyproject.toml, the lsl extra)")
 
 
 def _record_through(log: SessionLog, chain: Any) -> None:

@@ -250,7 +250,10 @@ class SourceConfig:
     kind: str = "synthetic"
     scenario: str = "alpha-schedule"       # synthetic only
     path: str | None = None                # replay only, relative to the protocol file
-    board: str | None = None               # hardware only
+    board: str | None = None               # hardware only: a key of the driver's board table (eegloop devices)
+    timeout_s: float = 15.0                # hardware only: how long to wait for the headset
+    # a pairing address or serial number is NEVER a protocol field: the source reads EEGLOOP_MAC_ADDRESS /
+    # EEGLOOP_SERIAL_NUMBER from the environment, so no resolved protocol or log can carry one
     pace: str = "fast"                     # 'wall' releases samples on the clock; 'fast' does not wait
     loop: bool = False
     seed: int | None = None                # synthetic only; null means the protocol's seed
@@ -263,8 +266,14 @@ class SourceConfig:
             _one_of(self.scenario, tuple(SCENARIOS), f"{path}.scenario", problems)
         if self.kind == "replay" and not self.path:
             problems.append(f"{path}.path: required -- a replay source needs a recording to play")
-        if self.kind in ("brainflow", "lsl") and not self.board and self.kind == "brainflow":
-            problems.append(f"{path}.board: required -- a hardware source needs a board key")
+        if self.kind == "brainflow":
+            if not self.board:
+                problems.append(f"{path}.board: required -- a headset source needs a key from the driver's board table")
+            else:
+                from ..sources.brainflow import BOARDS
+
+                _one_of(self.board, tuple(BOARDS), f"{path}.board", problems)
+        _positive(self.timeout_s, f"{path}.timeout_s", problems)
 
 
 @dataclass
