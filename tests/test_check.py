@@ -32,8 +32,11 @@ def test_a_clean_synthetic_stream_passes_and_the_report_carries_no_machine_path(
 
 
 def test_planted_drift_gap_flat_channel_and_line_noise_each_show_in_their_row():
-    gaps = _rows(run_check(SyntheticSource("gaps", duration_s=90.0, pace="fast"), seconds=80.0))
+    rep = run_check(SyntheticSource("gaps", duration_s=90.0, pace="fast"), seconds=80.0)
+    gaps = _rows(rep)
     assert gaps["dropped samples"]["value"].startswith("64 in 1") and gaps["sampling rate"]["status"] == "ok"
+    # the loss is counted as elapsed samples, so the clock row shows only the planted 200 ppm of drift
+    assert rep["fs_measured_timestamps"] == pytest.approx(256.0 / (1 + 200e-6), rel=2e-5)
     flat = run_check(SyntheticSource("flat-channel", duration_s=15.0, pace="fast"), seconds=10.0)
     assert not flat["ok"] and _rows(flat)["flat channels"]["status"] == "fail" and "TP10" in _rows(flat)["flat channels"]["value"]
     line = _rows(run_check(SyntheticSource("line-noise", duration_s=15.0, pace="fast"), seconds=10.0, mains_hz=60.0))

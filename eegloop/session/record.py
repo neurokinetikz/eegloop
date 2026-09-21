@@ -8,6 +8,12 @@ nothing about a learner's data has to be converted to be analysed with the cours
 
 A recording made here is the learner's. The sidecar says so -- ``license`` is "private" and
 ``label_source`` is "none" -- and no path inside it names the machine.
+
+The layout is channel-major for the *whole* file (all of channel 0, then all of channel 1, ...), which a
+stream cannot write as it arrives: each block is channels × a few samples. So the recorder keeps the
+blocks in memory and writes the file once, at ``close()`` -- 4 channels at 256 Hz cost about 15 MB an
+hour in float32, stated here so nobody is surprised. (The first version wrote each block's chunk in
+turn, a block-interleaved layout no reader of the format understands; ``nb-7-11`` found it.)
 """
 from __future__ import annotations
 
@@ -33,7 +39,7 @@ class Recorder:
         self.dataset, self.subject, self.run = dataset, subject, run
         self.reference = reference if reference is not None else str(info.nominal.get("reference", "TODO(confirm) (not reported by the source)"))
         self.generated_by = generated_by
-        self._bin = (self.out_dir / f"{name}.bin").open("wb")
+        self._chunks: list[np.ndarray] = []
         self._n = 0
         self._t0: float | None = None
         self._ts: list[np.ndarray] = []
@@ -48,7 +54,7 @@ class Recorder:
             self._t0 = float(block.t_start_s)
         if block.dropped_before:
             self.gaps.append((int(block.sample_index), int(block.dropped_before)))
-        np.ascontiguousarray(block.data, dtype="<f4").tofile(self._bin)
+        self._chunks.append(np.asarray(block.data, dtype="<f4"))
         if block.timestamps_s is None:
             self._has_ts = False
         elif self._has_ts:
@@ -62,7 +68,10 @@ class Recorder:
     def close(self) -> tuple[Path, Path]:
         if self.closed:
             return self.out_dir / f"{self.name}.bin", self.out_dir / f"{self.name}.json"
-        self._bin.close()
+        data = (np.concatenate(self._chunks, axis=1) if self._chunks
+                else np.zeros((self.info.n_channels, 0), dtype="<f4"))
+        np.ascontiguousarray(data, dtype="<f4").tofile(self.out_dir / f"{self.name}.bin")   # channels x samples, row-major
+        self._chunks = []
         fs = self.info.fs
         side: dict[str, Any] = {
             "channels": list(self.info.ch_names), "sfreq": fs, "source_sfreq": float(self.info.nominal.get("source_sfreq", fs)),

@@ -10,6 +10,7 @@ import pytest
 from eegloop.present import CallbackPresenter, ConsolePresenter
 from eegloop.session import Recorder, SessionReader, export_fif, run_protocol, scrub_paths, validate_protocol
 from eegloop.sources import ReplaySource, SyntheticSource
+from eegloop.sources.base import blocks
 
 PROTO = {
     "name": "alpha-up", "seed": 20260920, "block_samples": 32, "processing_ms": 10.0,
@@ -132,11 +133,16 @@ def test_record_raw_writes_the_site_asset_format_that_replay_reads_back(tmp_path
     assert side["label_source"] == "none" and side["license"].startswith("private")
     assert side["n_samples"] * 4 * 4 == side["bytes"] == (tmp_path / "rec" / "raw.bin").stat().st_size
     assert (tmp_path / "rec" / "raw.timestamps.npy").exists()
-    # the recording opens exactly as a shipped asset does
+    # the recording opens exactly as a shipped asset does, and holds the samples the source delivered, in order
     src = ReplaySource.from_asset(tmp_path / "rec" / "raw.bin", pace="fast")
     assert src.info.fs == 256.0 and src.n_samples == side["n_samples"]
     data, fs, names, ts = r.raw
     assert data.shape == (4, side["n_samples"]) and ts is not None and ts.size == side["n_samples"]
+    original = SyntheticSource("alpha-schedule", seed=p.seed, duration_s=7.0, pace="fast")
+    expect = np.concatenate([b.data for b in blocks(original, 32)], axis=1)[:, :side["n_samples"]]
+    assert np.allclose(data, expect, atol=1e-3)       # float32 storage; a block-interleaved layout would fail this
+    back = np.concatenate([b.data for b in blocks(src, 32)], axis=1)
+    assert np.allclose(back, expect[:, :back.shape[1]], atol=1e-3)
     mne = pytest.importorskip("mne")
     fif = export_fif(tmp_path / "rec" / "raw.bin")
     raw = mne.io.read_raw_fif(fif, preload=True, verbose="ERROR")

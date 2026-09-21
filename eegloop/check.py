@@ -107,8 +107,12 @@ def run_check(source: Source, *, seconds: float = 30.0, block_samples: int = 32,
     def add(item: str, status: str, value: str, note: str = "") -> None:
         rows.append({"item": item, "status": status, "value": value, "note": note})
 
-    # rate
-    fs_ts = float((tsa.size - 1) / (tsa[-1] - tsa[0])) if tsa is not None and tsa.size > 1 and tsa[-1] > tsa[0] else None
+    # rate -- from the timestamps, counting the samples a gap is known to have removed as elapsed samples, so a
+    # loss is not read as a slow clock (the drops row reports the loss; this row reports the clock)
+    fs_ts = None
+    if tsa is not None and tsa.size > 1 and tsa[-1] > tsa[0]:
+        n_missing_in_span = sum(k for _, k in detect_gaps(tsa, fs))
+        fs_ts = float((tsa.size - 1 + n_missing_in_span) / (tsa[-1] - tsa[0]))
     fs_wall = float(n / wall) if paced and wall > 0 else None
     measured = fs_ts if fs_ts is not None else fs_wall
     if measured is None:
