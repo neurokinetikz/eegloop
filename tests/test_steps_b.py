@@ -128,7 +128,8 @@ def test_a_full_chain_budgets_only_the_exact_steps(rng):
     ])
     b = latency_budget_for(chain, fs=fs, block_samples=B, processing_ms=10.0)
     assert b["rows"][0]["samples"] == 64.0                      # only the FIR contributes
-    assert [m["name"] for m in b["measured"]] == ["quality", "smoother"]
+    assert [m["name"] for m in b["measured"]] == ["smoother"] and [m["name"] for m in b["decision"]] == ["quality"]
+    assert b["decision"][0]["window_s"] == 1.0 and b["decision"][0]["ms"] == 1000.0
     assert b["total_ms"] == pytest.approx(64 / fs * 1000 + B / fs * 1000 + 10.0)
     out = chain.process(_block(rng, B))
     assert "quality" in out.flags and "envelope" in out.flags

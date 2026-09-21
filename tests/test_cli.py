@@ -37,7 +37,7 @@ def test_a_broken_protocol_exits_2_and_lists_every_problem(tmp_path, capsys):
 def test_budget_and_probe(capsys):
     assert main(["budget", "--protocol", str(SYN)]) == 0
     out = capsys.readouterr().out
-    assert "TOTAL" in out and "measured     quality" in out
+    assert "TOTAL" in out and "decision     quality" in out
     assert main(["budget", "--protocol", str(SYN), "--json"]) == 0
     b = json.loads(capsys.readouterr().out)
     assert b["rows"][0]["samples"] == 64.0 and b["total_ms"] == pytest.approx(64 / 256 * 1000 + 32 / 256 * 1000 + 10.0)

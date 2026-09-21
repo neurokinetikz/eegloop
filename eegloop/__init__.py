@@ -34,6 +34,7 @@ from .latency import (
     latency_budget,
     latency_budget_for,
     print_budget,
+    with_probe,
     zero_phase_lookahead_samples,
 )
 from .probe import energy_centroid, make_probe, measure_loop_delay, run_offline

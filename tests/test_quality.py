@@ -132,3 +132,21 @@ def test_gate_is_quality_first_and_declares_a_decision_delay():
     assert "decision" in gate.latency_note
     with pytest.raises(ValueError, match="cannot follow"):
         Chain([CausalFIR(fir_taps(9, (8.0, 12.0), 256.0), 2), gate])
+
+
+def test_gate_labels_are_the_shared_artifact_labels_plus_the_two_online_states():
+    """The gate ports data/scripts/detectors.py; its labels must be the notebook helpers' names, so a page
+    that says 'blink' or 'line-noise' means the same thing on the live gate and in the offline atlas.
+    ``gap`` and ``warming-up`` are online-only states with no offline counterpart, and are the only
+    labels allowed to differ."""
+    import ast
+    from pathlib import Path
+
+    from eegloop.steps.quality import QUALITY_LABELS
+
+    helpers = Path(__file__).resolve().parents[2] / "notebooks" / "_shared" / "helpers.py"
+    if not helpers.exists():
+        pytest.skip("notebooks/_shared/helpers.py not present")
+    line = next(ln for ln in helpers.read_text(encoding="utf-8").splitlines() if ln.startswith("ARTIFACT_LABELS = "))
+    shared = set(ast.literal_eval(line.split("=", 1)[1].strip()))
+    assert set(QUALITY_LABELS) - {"gap", "warming-up"} <= shared, set(QUALITY_LABELS) - shared

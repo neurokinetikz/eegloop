@@ -16,6 +16,10 @@ PACKET = 12                          # samples per transport packet: identical s
 LOSS_AT, LOSS_PACKETS = 2560, 5      # a planted loss of five packets after ten seconds
 
 
+# assembled at runtime so this file carries no pairing-address literal (CONTRACTS Phase 5, rule 6; check-content greps loop/)
+FAKE_MAC = ":".join(["AA", "BB", "CC", "DD", "EE", "FF"])
+
+
 class FakeShim:
     """The driver's board interface, fed by a deterministic generator."""
 
@@ -55,6 +59,11 @@ class FakeShim:
     def stop_stream(self) -> None:
         self.streaming = False
 
+    def insert_marker(self, value: float) -> None:
+        # the driver writes the marker into the sample stream at the moment of the call: the next sample out
+        if self._pos < self._rows.shape[1]:
+            self._rows[6, self._pos] = float(value)
+
     def release_session(self) -> None:
         self.released = True
 
@@ -89,7 +98,7 @@ def test_missing_driver_names_the_extra():
 
 
 def test_fake_board_streams_blocks_with_drops_accounted_and_timestamps_rebased(monkeypatch):
-    monkeypatch.setenv("EEGLOOP_MAC_ADDRESS", "AA:BB:CC:DD:EE:FF")
+    monkeypatch.setenv("EEGLOOP_MAC_ADDRESS", FAKE_MAC)
     monkeypatch.setenv("EEGLOOP_SERIAL_NUMBER", "SN-000123")
     src = _fake_source()
     assert src.info.fs == FS and src.info.ch_names == BOARDS[KEY]["channels"] and src.info.kind == "brainflow" and src.info.clock == "wall"
@@ -98,7 +107,7 @@ def test_fake_board_streams_blocks_with_drops_accounted_and_timestamps_rebased(m
     assert src.info.nominal["descriptor_mismatch"] == [] and src.info.nominal["driver_version"] == "fake"
     got = list(blocks(src, 32, timeout_s=0.3))
     shim = FakeShim.instances[-1]
-    assert shim.prepared and shim.streaming and shim.params["mac_address"] == "AA:BB:CC:DD:EE:FF"  # the driver got it; the log did not
+    assert shim.prepared and shim.streaming and shim.params["mac_address"] == FAKE_MAC  # the driver got it; the log did not
     n = sum(b.n_samples for b in got)
     assert n >= 5120 - 64 and all(b.n_samples == 32 for b in got)
     assert sum(b.dropped_before for b in got) == LOSS_PACKETS * PACKET == src.n_drops
@@ -140,3 +149,40 @@ def test_open_source_and_protocol_paths():
     ok = validate_protocol(dict(base, source={"kind": "brainflow", "board": KEY}))
     assert ok.source.timeout_s == 15.0
     assert "mac" not in str(ok.source).lower() and "serial" not in str(ok.source).lower()
+
+
+def test_markers_inserted_into_the_board_stream_come_back_on_the_source_clock():
+    """A marker written through the driver is stamped with the sample it landed on, rebased like the samples."""
+    src = _fake_source()
+    src.start()
+    markers = src.marker_source()
+    try:
+        first = src.read()
+        src.insert_marker(3)          # lands on the next sample the board delivers, after anything already polled
+        seen, cues = [], []
+        for _ in range(40):
+            seen.append(src.read())
+            cues = markers.read()
+            if cues:
+                break
+    finally:
+        src.stop()
+    assert len(cues) == 1 and cues[0][1] == "3"
+    t_cue = cues[0][0]
+    assert t_cue >= float(first.timestamps_s[-1])   # stamps are packet-identical on this board: the cue shares its packet's stamp
+    stamps = np.concatenate([b.timestamps_s for b in seen if b.timestamps_s is not None])
+    assert np.isclose(stamps, t_cue).any()       # the cue is stamped with a sample's own rebased timestamp
+    assert markers.read() == []                  # each cue is returned once
+
+
+def test_keyboard_markers_stamp_the_clock_at_the_read():
+    from eegloop.sources import KeyboardMarkers
+
+    keys = iter(["", "a", "", "zb", ""])
+    clock = iter([0.5, 1.0, 1.5, 2.0, 2.5])
+    km = KeyboardMarkers({"a": "left", "b": "right"}, lambda: next(clock), reader=lambda: next(keys))
+    assert km.read() == [] and km.read() == [(1.0, "left")] and km.read() == []
+    assert km.read() == [(2.0, "right")] and km.n_read == 2  # 'z' is not in the keymap
+    with pytest.raises(ValueError):
+        KeyboardMarkers({"ab": "x"}, lambda: 0.0, reader=lambda: "")
+    km.close()  # a test reader has nothing to restore

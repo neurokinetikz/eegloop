@@ -105,3 +105,51 @@ def test_build_chain_is_quality_first_and_lists_the_smoother_as_measured():
     assert chain.exact_latency_samples == 64.0 and chain.reset_on_gap_samples == 129
     plain = build_chain(spec, info, 32, quality=None, include_smoother=False)
     assert [s.kind for s in plain.steps] == ["reference", "causal_filter", "envelope"]
+
+
+def test_smoother_shifts_the_measured_probe_delay_and_the_exact_rows_do_not_move():
+    """A smoother has no single delay, so the budget lists it as measured; the probe is what measures it.
+    Without one the value delay equals the arithmetic; with one it is later by an amount of the order of the
+    time constant, and the expected (exact) value delay is the same number both times."""
+    from eegloop import CausalFIR, Chain, fir_taps, measure_loop_delay
+
+    fs, B = 256.0, 64
+    factory = lambda: Chain([CausalFIR(fir_taps(129, (8.0, 12.0), fs), 1)])  # noqa: E731
+    plain = measure_loop_delay(factory, fs=fs, block_samples=B, centre_hz=10.0, alignments=4)
+    smoothed = measure_loop_delay(factory, fs=fs, block_samples=B, centre_hz=10.0, alignments=4, smooth_s=0.5)
+    block_ms = B / fs * 1000.0
+    assert abs(plain["value_ms"] - plain["expected_value_ms"]) <= block_ms
+    assert smoothed["expected_value_ms"] == pytest.approx(plain["expected_value_ms"])
+    # the energy centroid of a 1.2-s burst through a one-pole smoother with tau = 0.5 s arrives about half a tau
+    # later (measured: ~240 ms); the cost is real, of the order of tau, and NOT in the exact rows
+    extra = smoothed["value_ms"] - plain["value_ms"]
+    assert 0.25 * 500.0 <= extra <= 1.5 * 500.0, extra
+
+
+def test_threshold_rewards_land_within_the_budget_of_the_planted_onsets(tmp_path):
+    """Proposal §8 C gate: threshold crossings land within budget ± one block of the planted onsets. The
+    alpha-schedule scenario plants two bursts; a threshold protocol with no dwell must reward each within
+    the chain's declared delay of its onset, and never reward in the twenty seconds before the first."""
+    from eegloop.session import SessionReader, run_protocol, validate_protocol
+    from eegloop.sources import SyntheticSource
+
+    proto = {
+        "name": "thr", "seed": 20260920, "block_samples": 32, "processing_ms": 10.0,
+        "source": {"kind": "synthetic", "scenario": "alpha-schedule", "pace": "fast"},
+        "signal": {"band": [8, 12], "channels": ["TP9", "TP10"], "n_taps": 129},
+        "quality": {"enabled": False},
+        "baseline": {"mode": "fixed"},
+        "reward": {"mode": "threshold", "threshold_z": 3.0, "dwell_s": 0.0, "refractory_s": 5.0, "on_miss": "zero"},
+        "phases": [{"kind": "calibrate", "duration_s": 20}, {"kind": "train", "duration_s": 100}],
+    }
+    p = validate_protocol(proto, source="mem")
+    result = run_protocol(p, out_dir=tmp_path / "thr")
+    assert result.status == "ok"
+    onsets = [b["onset_s"] for b in SyntheticSource("alpha-schedule", seed=p.seed, duration_s=121.0).truth["alpha_bursts"]]
+    rewards = [e["t_s"] for e in SessionReader(tmp_path / "thr").events("reward")]
+    total_s, block_s = result.budget["total_ms"] / 1000.0, 32 / 256.0
+    assert onsets == [30.0, 75.0] and rewards, rewards
+    assert not [r for r in rewards if r < onsets[0]], rewards
+    for onset in onsets:
+        first = min((r for r in rewards if r >= onset), default=None)
+        assert first is not None and onset + total_s - 2 * block_s <= first <= onset + total_s + block_s, (onset, first, total_s, rewards)

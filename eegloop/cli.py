@@ -19,7 +19,7 @@ import sys
 from typing import Any, Sequence
 
 from .feedback.signal import SignalSpec, build_chain
-from .latency import latency_budget_for, print_budget
+from .latency import with_probe, latency_budget_for, print_budget
 from .probe import measure_loop_delay
 from .session.protocol import ProtocolError, load_protocol, resolved
 from .versions import installed_versions
@@ -85,7 +85,7 @@ def _run(args: argparse.Namespace) -> int:
         overrides["output.record_raw"] = True
     protocol = load_protocol(args.protocol, overrides)
     source = _source_and_info(protocol, args.source) if args.source else None
-    result = run_protocol(protocol, source, presenter=NullPresenter() if args.quiet else ConsolePresenter(),
+    result = run_protocol(protocol, source, presenter=NullPresenter() if args.quiet else ConsolePresenter(block_samples=protocol.block_samples),
                           out_dir=args.out, fail_fast=args.fail_fast)
     print(json.dumps(result.to_dict(), indent=2, default=str))
     return 0 if result.status == "ok" else 1
@@ -136,6 +136,9 @@ def _probe(args: argparse.Namespace) -> int:
           f"(range {r['value_min_ms']:.2f}–{r['value_max_ms']:.2f} over the block grid)")
     if spec.smooth_s > 0:
         print(f"  smoothing tau {spec.smooth_s:g} s: its cost is the gap between measured and expected above")
+    budget = with_probe(latency_budget_for(factory(), fs=src.info.fs, block_samples=protocol.block_samples,
+                                           processing_ms=protocol.processing_ms, convention=protocol.buffer_convention), r)
+    print(f"  within one block of the arithmetic: {'yes' if budget['probe_within_one_block'] else 'NO'}")
     return 0
 
 

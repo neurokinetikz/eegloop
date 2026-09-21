@@ -19,6 +19,7 @@ __all__ = ["Presenter", "NullPresenter", "ConsolePresenter", "CallbackPresenter"
 class Presenter(Protocol):
     def start(self, info: StreamInfo) -> None: ...
     def update(self, shown: float, *, z: float, gated: bool, t_s: float, phase: str) -> None: ...
+    def decision(self, d: Any) -> None: ...
     def stop(self) -> None: ...
 
 
@@ -29,6 +30,9 @@ class NullPresenter:
     def update(self, shown: float, *, z: float, gated: bool, t_s: float, phase: str) -> None:
         pass
 
+    def decision(self, d: Any) -> None:
+        pass
+
     def stop(self) -> None:
         pass
 
@@ -37,13 +41,15 @@ class ConsolePresenter:
     """One line, redrawn: a bar for the value, a marker when the gate is closed, the phase and the time.
     A BCI decision prints on its own line."""
 
-    def __init__(self, width: int = 40, stream: Any = None, every_s: float = 0.1) -> None:
+    def __init__(self, width: int = 40, stream: Any = None, every_s: float = 0.1, block_samples: int | None = None) -> None:
         self.width, self.stream, self.every_s = int(width), stream or sys.stdout, float(every_s)
+        self.block_samples = None if block_samples is None else int(block_samples)
         self._last = -1e9
         self.n_updates = 0
 
     def start(self, info: StreamInfo) -> None:
-        print(f"[{info.kind}] {info.n_channels} ch at {info.fs:g} Hz — {', '.join(info.ch_names)}", file=self.stream)
+        rate = "" if not self.block_samples else f", a value every {self.block_samples} samples ({info.fs / self.block_samples:.2f} Hz)"
+        print(f"[{info.kind}] {info.n_channels} ch at {info.fs:g} Hz — {', '.join(info.ch_names)}{rate}", file=self.stream)
 
     def update(self, shown: float, *, z: float, gated: bool, t_s: float, phase: str) -> None:
         self.n_updates += 1

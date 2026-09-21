@@ -36,8 +36,7 @@ __all__ = [
     "zero_phase_lookahead_samples",
     "latency_budget",
     "latency_budget_for",
-    "print_budget",
-]
+    "print_budget", "with_probe"]
 
 #: The readings of the buffer term, and why the course teaches one of them.
 BUFFER_CONVENTIONS: dict[str, str] = {
@@ -176,9 +175,11 @@ def latency_budget_for(chain: "Chain", *, fs: float, block_samples: int, process
     The filter row is the sum of every step whose delay is exact (see
     :class:`eegloop.steps.OnlineStep`), with each contributor named in ``exact_steps``. Steps whose
     delay is not one number are listed under ``measured`` with their note and are **not** in
-    ``total_ms``: that row is filled by the loopback probe (:func:`eegloop.probe.measure_loop_delay`),
-    not by an estimate. ``decision`` is reserved for delays that gate a decision rather than the
-    signal (a quality window, an epoch, a dwell) once later phases add such steps.
+    ``total_ms``: that row is filled by the loopback probe (:func:`eegloop.probe.measure_loop_delay`;
+    :func:`with_probe` writes its result back). ``decision`` lists the steps that delay a *decision*
+    rather than the signal -- the quality gate's window and hold here; the BCI runner appends the
+    decoder's window and the dwell -- each with its seconds, and none of them in ``total_ms`` either,
+    because a held display or a late verdict is not a late sample.
     """
     fs = float(fs)
     exact = chain.exact_steps
@@ -191,10 +192,41 @@ def latency_budget_for(chain: "Chain", *, fs: float, block_samples: int, process
         "n_taps": None, "phase": "causal",
         "exact_steps": [{"name": s.name, "samples": float(s.latency_samples), "note": s.latency_note}
                         for s in exact],
-        "measured": [{"name": n, "note": note} for n, note in chain.inexact],
-        "decision": [],
+        "measured": [], "decision": [],
     })
+    for step in chain.steps:
+        if step.latency_samples is not None:
+            continue
+        entry: dict[str, Any] = {"name": step.name, "note": step.latency_note}
+        if getattr(step, "kind", None) == "quality":
+            d = step.describe()
+            window = d.get("window_s")
+            entry.update({"window_s": window, "hold_s": d.get("hold_s"),
+                          "ms": None if window is None else float(window) * 1000.0})
+            out["decision"].append(entry)
+        else:
+            out["measured"].append(entry)
     return out
+
+
+def with_probe(budget: dict[str, Any], probe: dict[str, Any]) -> dict[str, Any]:
+    """Write a loopback-probe result (:func:`eegloop.probe.measure_loop_delay`) into a budget.
+
+    The exact rows stay what the arithmetic says; ``probe`` records what was measured -- the filter
+    delay and the value delay, each beside its expectation -- and ``probe_within_one_block`` says
+    whether the measured value delay is within one block period of the arithmetic, the criterion
+    lesson L7.16's rubric applies. The budget is modified in place and returned.
+    """
+    block_ms = float(budget["block_samples"]) / float(budget["fs_hz"]) * 1000.0
+    budget["probe"] = {
+        "filter_ms": float(probe["filter_ms"]), "expected_filter_ms": float(probe["expected_filter_ms"]),
+        "value_ms": float(probe["value_ms"]), "expected_value_ms": float(probe["expected_value_ms"]),
+        "value_range_ms": [float(probe["value_min_ms"]), float(probe["value_max_ms"])],
+        "alignments": int(probe["alignments"]), "burst_hz": float(probe["burst_hz"]),
+        "note": "measured by the loopback probe on this chain; the gap between value_ms and expected_value_ms is the cost of the steps listed under measured",
+    }
+    budget["probe_within_one_block"] = abs(budget["probe"]["value_ms"] - budget["probe"]["expected_value_ms"]) <= block_ms
+    return budget
 
 
 def print_budget(budget: dict[str, Any], *, title: str = "") -> None:
@@ -213,5 +245,11 @@ def print_budget(budget: dict[str, Any], *, title: str = "") -> None:
     print(f"{'':12s} {'mean over block position':46s} {'':>9s} {budget['mean_ms']:9.2f}")
     for m in budget.get("measured", []):
         print(f"{'measured':12s} {m['name']}: {m['note']}")
+    for m in budget.get("decision", []):
+        print(f"{'decision':12s} {m['name']}: {m['note']}")
+    if budget.get("probe"):
+        pr = budget["probe"]
+        print(f"{'probe':12s} value delay measured {pr['value_ms']:.2f} ms, expected {pr['expected_value_ms']:.2f} ms"
+              + (" — within one block" if budget.get("probe_within_one_block") else " — NOT within one block"))
     print(f"\nloop update rate {budget['update_rate_hz']:.2f} Hz "
           f"({budget['block_samples']} samples at {budget['fs_hz']:.0f} Hz)")

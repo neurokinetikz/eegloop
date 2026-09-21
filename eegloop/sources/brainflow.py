@@ -130,6 +130,7 @@ class BrainFlowSource:
         self._last_ts: float | None = None
         self._package_modulus = package_modulus
         self._pending: list[Block] = []
+        self._cues: list[tuple[float, str]] = []
         self._t_wall0: float | None = None
         self.n_drops = 0
         self._pkg_steps: dict[int, int] = {}   # histogram of package-number increments, for the report
@@ -255,6 +256,13 @@ class BrainFlowSource:
         if ts is not None and self._ts0 is None:
             self._ts0 = float(ts[0])
         missing = self._missing_before_each(pkg, n)
+        if self._marker_row is not None and int(self._marker_row) < raw.shape[0]:
+            # the board's marker row: a nonzero value is a cue, stamped with that sample's rebased timestamp
+            # (or its sample count when the driver stamps nothing), on the same clock as the samples
+            marks = raw[int(self._marker_row)]
+            for i in np.flatnonzero(marks != 0):
+                t_i = float(ts[i] - self._ts0) if ts is not None else (self._count + int(missing[: i + 1].sum()) + i) / self.info.fs
+                self._cues.append((t_i, str(int(marks[i])) if float(marks[i]).is_integer() else str(float(marks[i]))))
         fs = self.info.fs
         # split at every loss so each emitted raw block is one contiguous run with its own dropped_before
         cut = [0] + [i for i in range(1, n) if missing[i] > 0] + [n]
@@ -293,6 +301,18 @@ class BrainFlowSource:
             out[:] = miss
         return out
 
+    # -- the board's marker row -----------------------------------------------------------------------
+    def insert_marker(self, code: float) -> None:
+        """Write a marker into the board's own stream, so it is stamped by the driver with the samples."""
+        fn = getattr(self._shim, "insert_marker", None)
+        if fn is None:
+            raise RuntimeError("this driver session cannot insert markers")
+        fn(float(code))
+
+    def marker_source(self) -> "_PendingMarkers":
+        """Cues read from the board's marker row, as ``(t_s, label)`` on the source clock, each returned once."""
+        return _PendingMarkers(self)
+
     @property
     def package_steps(self) -> dict[int, int]:
         """Histogram of package-number increments seen: ``{1: n}`` means one count per sample."""
@@ -302,3 +322,14 @@ class BrainFlowSource:
         """Everything a log may carry about this source. The pairing details are not in it by construction."""
         return {"key": self.key, "info": {"fs": self.info.fs, "ch_names": list(self.info.ch_names), "clock": self.info.clock},
                 "nominal": dict(self.info.nominal), "n_drops": self.n_drops, "package_steps": self.package_steps}
+
+
+class _PendingMarkers:
+    """A :class:`~eegloop.sources.markers.MarkerSource` over a driver source's marker row."""
+
+    def __init__(self, source: BrainFlowSource) -> None:
+        self._source = source
+
+    def read(self) -> list[tuple[float, str]]:
+        out, self._source._cues = self._source._cues, []
+        return out

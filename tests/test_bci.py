@@ -233,3 +233,64 @@ def test_ssvep_cca_finds_the_planted_flicker_and_the_alpha_caveat_is_real():
     at = lambda t0: seen[min(seen, key=lambda k: abs(k - t0))]  # noqa: E731
     assert at(30.0) == 12.0 and at(70.0) == 15.0 and at(50.0) is None
     assert "alpha" in det.latency_note and det.latency_samples == 4 * fs
+
+
+def test_chance_interval_agrees_with_the_csp_widget_to_the_normal_approximation():
+    """w-csp-explorer's csp.ts chanceInterval is the normal approximation with z = 1.96, clipped to [0, 1];
+    the library's (helpers_l6's) is the exact binomial interval. They must agree to within one trial's
+    worth of accuracy for every n a page reports, or a learner would see two chance bands."""
+    import math
+
+    for n in (20, 40, 45, 60, 100, 144, 509, 4000):
+        for k in (2, 4):
+            chance = 1.0 / k
+            se = math.sqrt(chance * (1 - chance) / n)
+            lo_w, hi_w = max(0.0, chance - 1.96 * se), min(1.0, chance + 1.96 * se)
+            lo, hi = chance_interval(n, chance)
+            assert abs(lo - lo_w) <= 1.0 / n + 1e-12 and abs(hi - hi_w) <= 1.0 / n + 1e-12, (n, k, (lo, hi), (lo_w, hi_w))
+
+
+def test_decision_latency_is_the_window_within_one_block_and_the_filter_is_in_the_content():
+    """Proposal §8 D gate, measured rather than assumed. Cue-locked: the decision is computed at the end of
+    the block that completes the window, so its WALL latency after the cue is tmax within one block. The
+    causal filter's 64 samples are not a wait on top of that: offline and online windows are both cut on
+    the filtered stream's clock, so the filter delay is inside the window's content -- stated, exact, in
+    the decoder's latency note -- and the information the decision uses ends 64 samples before the
+    window does. Sliding: the wall latency is a distribution -- never under the dwell, its median at or
+    under tmax + dwell + one block, its tail bounded only by the grace (the posterior may cross the
+    threshold late in the window and the dwell starts there); a sliding decoder that scores well can also
+    decide before the window lies wholly inside the imagery. That is why the runner states the window as
+    the delay and the dwell as a choice, not an identity."""
+    _decode()
+    X, y, t, fs, names, _ = _mi_offline(tmin=0.5, tmax=2.0)
+    fit_idx = t < 65.0
+    dec = fit_frozen("csp_lda", X[fit_idx], y[fit_idx], classes=("left", "right"), fs=fs, ch_names=names,
+                     tmin_s=0.5, tmax_s=2.0, folds=5, seed=SEED, filter_delay_samples=64.0)
+    assert dec.filter_delay_samples == 64.0 and "64 samples" in dec.latency_note
+    B, dwell, block_s = 32, 0.5, 32 / fs
+    # cue-locked: wall latency = the end of the block that emitted the decision, minus the cue
+    src = SyntheticSource("mi-2class", seed=SEED, duration_s=120.0, pace="fast")
+    loop = BCILoop(src, _chain(fs, len(names)), block_samples=B, decoder=dec, mode="cue-locked",
+                   markers=src.marker_source(), classes=("left", "right"), grace_s=1.5)
+    emitted = []
+    for b in blocks(src, B):
+        if b.t_end_s > 120.0:
+            break
+        rec = loop.step(b, phase="test")
+        if rec["decision"] is not None:
+            emitted.append((b.t_end_s, rec["decision"].t_s - dec.tmax_s))   # (wall time, cue time)
+    late = [(t_wall, t_cue) for t_wall, t_cue in emitted if t_cue >= 70.0]
+    assert len(late) >= 6
+    for t_wall, t_cue in late:
+        lag = t_wall - t_cue
+        assert dec.tmax_s - 1e-9 <= lag <= dec.tmax_s + block_s + 1e-9, (lag, dec.tmax_s, block_s)
+    # sliding: an upper bound, and never before the dwell has elapsed
+    src = SyntheticSource("mi-2class", seed=SEED, duration_s=120.0, pace="fast")
+    loop = BCILoop(src, _chain(fs, len(names)), block_samples=B, decoder=dec, mode="sliding", step_samples=B,
+                   smooth_s=0.0, threshold=0.7, dwell_s=dwell, refractory_s=1.0, markers=src.marker_source(), grace_s=1.5)
+    stats = loop.run([("test", 120.0)])
+    held_out = [tr for tr in stats.trials if tr["t_cue_s"] >= 70.0 and tr["decided"]]
+    assert len(held_out) >= 6
+    lags = sorted(tr["t_decision_s"] - tr["t_cue_s"] for tr in held_out)
+    assert all(dwell <= lag <= dec.tmax_s + 1.5 + 1e-9 for lag in lags), lags          # the scoring window: tmax to tmax + grace
+    assert float(np.median(lags)) <= dec.tmax_s + dwell + block_s + 1e-9, lags

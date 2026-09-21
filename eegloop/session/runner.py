@@ -170,6 +170,11 @@ def _run_bci(protocol: Protocol, src: Source, *, presenter: Any, out_dir: str | 
     if loop.decoder is not None:
         budget["decoder"] = {"latency_samples": loop.decoder.latency_samples, "latency_ms": loop.decoder.latency_samples / src.info.fs * 1000.0,
                              "note": loop.decoder.latency_note}
+        budget["decision"].append({"name": "decoder window", "ms": loop.decoder.latency_samples / src.info.fs * 1000.0,
+                                   "window_s": (b.tmax_s - b.tmin_s), "note": loop.decoder.latency_note})
+        if b.mode == "sliding":
+            budget["decision"].append({"name": "dwell", "ms": b.dwell_s * 1000.0, "window_s": b.dwell_s,
+                                       "note": "the dwell before a decision is a choice, not a cost of the decoder"})
     stats = loop.stats.describe(b.classes)
     if loop.stats.processing_ms:
         p = stats["processing_ms"]

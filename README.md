@@ -199,6 +199,80 @@ package to that with an allowlist of exactly these three files.
 | `muse-s-athena` | Muse S Athena | `MUSE_S_ANTHENA_BOARD` | frontotemporal-4 | TP9, AF7, AF8, TP10 | 256 Hz | native Bluetooth LE, no dongle | 2026-09-20 |
 | `brainbit` | BrainBit | `BRAINBIT_BOARD` | occipitotemporal-4 | O1, O2, T7, T8 | 250 Hz | native Bluetooth LE, no dongle | 2026-09-20 |
 
+## The protocol schema
+
+A protocol is a YAML (or JSON) file with the blocks below; `eegloop validate --protocol f.yaml` checks
+it all at once and prints every problem with its dotted path (`reward.hi_z: expected a number, got
+'high'`), and `eegloop validate --json` prints it resolved, every default filled in — which is also
+what `protocol-resolved.json` in a session directory holds and what the log's `protocol_hash` is
+computed over. `load_protocol(path, {"source.pace": "wall"})` applies dotted overrides before
+validation. Every value below is the default; `null` means "not set".
+
+| block | field | default | meaning |
+|---|---|---|---|
+| — | `name` | *(required)* | the session directory's name |
+| — | `seed` | *(required)* | seeds the synthetic source and the sham token; the log records it |
+| — | `block_samples` | `32` | samples per block: a row of the budget and the loop's update period |
+| — | `processing_ms` | `10.0` | the stated processing time; the run replaces it with the measured one |
+| — | `buffer_convention` | `block-period` | `block-period` or `first-to-last` (`BUFFER_CONVENTIONS`) |
+| `source` | `kind` | `synthetic` | `synthetic` \| `replay` \| `brainflow` \| `lsl` (the last waits on its binding) |
+| | `scenario` | `alpha-schedule` | synthetic only: a key of `SCENARIOS` |
+| | `path` | `null` | replay only, relative to the protocol file: `.npz`, `.csv`, a `.bin` with its sidecar, `.fif`/`.edf` via the `mne` extra |
+| | `board` | `null` | hardware only: a key of the board table (`eegloop devices`); pairing details come from the environment, never from here |
+| | `timeout_s` | `15.0` | hardware only: how long to wait for the first samples |
+| | `pace` | `fast` | `wall` releases samples on the clock; `fast` does not wait |
+| | `loop` | `false` | replay a recording again when it ends |
+| | `seed` | `null` | synthetic only; `null` means the protocol's seed |
+| | `duration_s` | `null` | synthetic only; `null` means the phases' total |
+| `signal` | `band` | `[8.0, 12.0]` | Hz |
+| | `channels` | `[]` | empty: every channel of the source |
+| | `reference` | `none` | `none` \| `average` \| `channels` |
+| | `reference_channels` | `[]` | with `reference: channels` |
+| | `n_taps` | `129` | the causal FIR's length; its exact delay is `(n_taps − 1) / 2` samples |
+| | `derivation` | `rms` | `rms` \| `log-power` — the per-block value |
+| | `control_band` | `[16.0, 20.0]` | the band `sham-band` computes from |
+| | `smooth_s` | `0.0` | the smoother's time constant; it is latency, and the probe measures it |
+| `quality` | `enabled` | `true` | the gate runs first, on the raw block |
+| | `window_s` | `1.0` | the decision window (listed under the budget's `decision`) |
+| | `hold_s` | `0.5` | how long the display stays held after a violation |
+| | `mains_hz` | `null` | 50 or 60: the line-noise label needs it |
+| | `policy` | `freeze` | `freeze` the display, or show `zero` |
+| `baseline` | `mode` | `fixed` | `fixed` from the calibration phase, or `adaptive` (what that does to a learning claim: L7.13) |
+| | `centre` | `median` | `median` \| `mean` |
+| | `spread` | `mad` | `mad` \| `sd` |
+| | `window_s` | `30.0` | adaptive only |
+| | `percentile` | `50.0` | adaptive only |
+| `reward` | `mode` | `continuous` | `continuous` (a bar) \| `threshold` (an event) |
+| | `lo_z`, `hi_z` | `-1.0`, `2.0` | continuous: the z range mapped onto the bar |
+| | `threshold_z` | `1.0` | threshold: the crossing |
+| | `dwell_s` | `0.5` | threshold: how long above before an event |
+| | `refractory_s` | `1.0` | threshold: at most one event per this many seconds |
+| | `on_miss` | `hold` | `hold` the bar, or show `zero` |
+| `sham` | `mode` | `veridical` | `veridical` \| `sham-band` \| `sham-yoked` \| `sham-inverted` (`SHAM_MODES`); sealed into the log as a token |
+| | `donor` | `null` | `sham-yoked`: a session directory, relative to the protocol file |
+| `bci` | *(absent)* | `null` | present: calibrate-then-apply instead of feedback |
+| | `pipeline` | `csp_lda` | `csp_lda` \| `riemann_ts` \| `xdawn_lda` |
+| | `classes` | `["left", "right"]` | the cue labels |
+| | `tmin_s`, `tmax_s` | `0.5`, `3.5` | the window after each cue; the window is the decoder's delay |
+| | `band` | `[8.0, 30.0]` | Hz |
+| | `n_taps` | `129` | |
+| | `n_components` | `4` | CSP filters, or Xdawn filters per class |
+| | `mode` | `sliding` | `sliding` (a posterior every step) \| `cue-locked` (one per cue) |
+| | `step_samples` | `32` | sliding |
+| | `smooth_s` | `0.5` | sliding: posterior smoothing (measured, not summed) |
+| | `threshold`, `dwell_s`, `refractory_s` | `0.7`, `0.5`, `1.0` | sliding: the dwell decision |
+| | `folds` | `5` | cross-validation folds, in cue order |
+| | `grace_s` | `1.0` | how long after `tmax` a decision still counts for a cue |
+| `phases` | list of `{kind, duration_s, label}` | `[]` | `kind`: `rest` \| `calibrate` \| `train` \| `test`; a fixed baseline needs a `rest` or `calibrate` phase first; a bci protocol needs a `calibrate` phase before its first `train`/`test` |
+| `output` | `dir` | `sessions` | where session directories go, beside the protocol |
+| | `record_raw` | `false` | also write the raw stream as a `.bin` + sidecar |
+| `versions` | `on_mismatch` | `warn` | `warn` \| `error` \| `ignore` when a pinned version differs |
+| | `pins` | `{}` | `{package: version}` |
+
+The six shipped protocols in `configs/` are complete examples: three feedback (`alpha-up-synthetic`,
+`alpha-up-replay`, `alpha-up-oc4-replay` over the four-channel asset) and three BCI (`mi-2class-synthetic`,
+`p300-synthetic`, `eo-ec-synthetic`).
+
 ## Two words that mean two things in this repository
 
 **Pop.** `data/scripts/detectors.py` defines an electrode pop as an abrupt *sustained* step on one

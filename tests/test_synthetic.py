@@ -101,5 +101,16 @@ def test_every_scenario_builds_and_names_its_channels():
         src = SyntheticSource(name, duration_s=8.0)
         assert src.info.kind == "synthetic" and src.info.nominal["scenario"] == name
         assert src.truth["ch_names"] == list(src.info.ch_names)
+
+
+def test_every_scenario_accounts_its_planted_drops_exactly():
+    """The drop count a scenario's blocks carry equals what its truth says was removed — zero for every
+    scenario but ``gaps`` — and the source's own total agrees; a scenario that planted a loss the blocks
+    did not report would be the bug pf-dropped-samples describes, planted by the library itself."""
+    for name in SCENARIOS:
+        src = SyntheticSource(name, duration_s=90.0)
+        counted = sum(b.dropped_before for b in blocks(src, 32))
+        planted = src.truth["gap"]["n_missing"] if src.truth["gap"] else 0
+        assert counted == planted == src.n_missing_total, (name, counted, planted)
     with pytest.raises(ValueError):
         SyntheticSource("not-a-scenario")
