@@ -13,15 +13,16 @@ from pathlib import Path
 LOOP = Path(__file__).resolve().parents[1]
 SCAN = (".py", ".md", ".toml", ".yaml", ".yml", ".txt")
 
-# The same patterns scripts/check-content.ts:906-916 applies to content.
+# The same patterns scripts/check-content.ts applies to content (assembled so this file carries none of them;
+# since the Phase 5 addendum that script also greps loop/ itself).
 FORBIDDEN = [
-    (re.compile(r"research-grade", re.I), "vendor marketing language (§10.10)"),
+    (re.compile("research" + "-grade", re.I), "vendor marketing language (§10.10)"),
     (re.compile(r"/Users/[A-Za-z]"), "a home directory (§10.10)"),
     (re.compile(r"/home/[a-z]"), "a home directory (§10.10)"),
-    (re.compile(r"gs://"), "a private bucket (§10.10)"),
-    (re.compile(r"/Volumes/"), "a local volume (§10.10)"),
-    (re.compile(r"/mnt/"), "a local mount (§10.10)"),
-    (re.compile(r"(clinical|medical|lab)-grade", re.I), "vendor marketing language"),
+    (re.compile("gs:" + "//"), "a private bucket (§10.10)"),
+    (re.compile("/" + "Volumes/"), "a local volume (§10.10)"),
+    (re.compile("/" + "mnt/"), "a local mount (§10.10)"),
+    (re.compile("(clinical|medical|lab)" + "-grade", re.I), "vendor marketing language"),
 ]
 
 # Assembled at runtime so this file does not itself contain the names it forbids.
