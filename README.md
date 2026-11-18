@@ -44,7 +44,7 @@ Run from **this directory**. Inside the course monorepo that is `loop/`, so pref
 written.
 
 **Where this lives.** The package is developed inside the course repository (the lessons that teach it are
-L7.10–L7.16 of [Scalp to Source](https://eeg.neurokinetikz.com/paths/consumer-nf-bci), and
+L7.10–L7.16 of [Scalp to Source](https://eeg.neurokinetikz.com/paths/consumer-nf-bci/), and
 `tests/test_parity_helpers_l7.py` holds it to the notebooks it was ported from) and mirrored one way to
 `neurokinetikz/eegloop` by `git subtree`, so that a clone is a working package with no course attached. Issues
 and pull requests on the mirror are read; changes are made upstream and arrive with the next push, so a commit
